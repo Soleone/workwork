@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { gitQuery, onPath, run } from "./run.ts";
 
@@ -35,7 +35,9 @@ export async function ownedRepos(src: string): Promise<string[]> {
 }
 
 function findRepos(dir: string, depth: number): string[] {
-  if (existsSync(join(dir, ".git"))) return [dir];
+  const dotGit = join(dir, ".git");
+  // A .git file marks a worktree or submodule: its repo is listed from where it lives.
+  if (existsSync(dotGit)) return statSync(dotGit).isDirectory() ? [dir] : [];
   if (depth === 0) return [];
   return readdirSync(dir, { withFileTypes: true })
     .filter(

@@ -46,13 +46,16 @@ async function list(all: boolean, options: { play?: string; allHistory?: boolean
   const src = process.env.SRC ?? join(homedir(), "src");
   const repos = all ? await ownedRepos(src) : [repoRoot(".")];
   let total = 0;
+  let idle = 0;
   // Repos run one at a time: some finders (kit check) are heavy enough on their own.
   for (const repo of repos) {
     const label = repo.startsWith(src) ? relative(src, repo) : repo;
-    const { text, count } = await listing(repo, label, options);
-    console.log(`${text}\n`);
+    const { text, count, failed } = await listing(repo, label, options);
     total += count;
+    if (all && count + failed === 0) idle++;
+    else console.log(`${text}\n`);
   }
+  if (idle) console.log(`${idle} other repos: nothing to do.\n`);
   if (total) console.log(`Ready to work: ${all ? "cd <repo> && " : ""}workwork prompt <id>`);
 }
 

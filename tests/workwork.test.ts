@@ -123,14 +123,15 @@ describe("finders", () => {
     expect(text).not.toContain("spec-uncited/capture.open");
   });
 
-  test("pnpm outdated: below 1.0 a minor bump counts as major", () => {
+  test("pnpm outdated: warnings before the JSON are skipped; below 1.0 a minor bump counts as major", () => {
     const found = parseOutdated(
-      JSON.stringify({
-        a: { current: "1.2.3", latest: "1.2.4", dependencyType: "dependencies" },
-        b: { current: "1.2.3", latest: "1.3.0", dependencyType: "devDependencies" },
-        c: { current: "0.2.0", latest: "0.3.0", dependencyType: "dependencies" },
-        d: { latest: "2.0.0", dependencyType: "dependencies" },
-      }),
+      "[WARN] Unsupported engine\n" +
+        JSON.stringify({
+          a: { current: "1.2.3", latest: "1.2.4", dependencyType: "dependencies" },
+          b: { current: "1.2.3", latest: "1.3.0", dependencyType: "devDependencies" },
+          c: { current: "0.2.0", latest: "0.3.0", dependencyType: "dependencies" },
+          d: { latest: "2.0.0", dependencyType: "dependencies" },
+        }),
     );
     expect(found.map(({ key, bump }) => `${key} ${bump}`)).toEqual([
       "a patch",

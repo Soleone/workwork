@@ -16,7 +16,7 @@ export async function listing(
   repo: string,
   label: string,
   options: ListOptions,
-): Promise<{ text: string; count: number }> {
+): Promise<{ text: string; count: number; failed: number }> {
   const plays = selectPlays(options.play);
   const [results, history] = await Promise.all([
     findCandidates(repo, plays.filter(hasFinder)),
@@ -70,7 +70,8 @@ export async function listing(
     hidden ? `${hidden} hidden by past decisions or open PRs (--all-history shows them).` : "",
     unrun.length ? `Not run, finder not built yet: ${unrun.join(", ")}.` : "",
   ].filter(Boolean);
-  return { text: [header, ...blocks, ...footer].join("\n\n"), count };
+  const failed = results.filter((result) => result.error).length;
+  return { text: [header, ...blocks, ...footer].join("\n\n"), count, failed };
 }
 
 function selectPlays(name: string | undefined): Play[] {

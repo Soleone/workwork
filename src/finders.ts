@@ -36,7 +36,11 @@ async function readOutdated(repo: string) {
 }
 
 export function parseOutdated(json: string): (Found & { bump: Bump })[] {
-  const packages = Object.entries(JSON.parse(json.trim() || "{}") as Record<string, OutdatedInfo>);
+  // pnpm may print [WARN] lines before the JSON.
+  const start = json.indexOf("{");
+  const packages = Object.entries(
+    JSON.parse(start === -1 ? "{}" : json.slice(start)) as Record<string, OutdatedInfo>,
+  );
   return packages.flatMap(([name, { current, latest, dependencyType }]) =>
     current
       ? [
