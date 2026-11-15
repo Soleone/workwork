@@ -61,7 +61,7 @@ export async function listing(
     (level) => `${perLevel.get(level)} ${level}`,
   );
   const header = count
-    ? `${label}: ${count} candidates (${levels.join(", ")}) · checks: ${checks.join(", ") || "none, so nothing is auto"}`
+    ? `${label}: ${count} candidate${count === 1 ? "" : "s"} (${levels.join(", ")}) · checks: ${checks.join(", ") || "none, so nothing is auto"}`
     : `${label}: nothing to do`;
   const unrun = plays
     .filter((play) => !hasFinder(play))
