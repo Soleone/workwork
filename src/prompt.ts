@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { effectiveLevel, findCandidates, hasFinder } from "./candidates.ts";
 import { loadPlays } from "./plays.ts";
 import { repoChecks } from "./repo.ts";
+import { onPath } from "./run.ts";
 import { latestDecisions, readDecisions } from "./store.ts";
 
 const LEAN = readFileSync(new URL("../prompts/lean.md", import.meta.url), "utf8").trim();
@@ -45,7 +46,11 @@ ${
     : `This candidate is \`${candidate.key}\`. If nothing should change, change nothing and run \`${keep}\` so it isn't offered again until it changes.`
 }
 
-Start with the shortest credible pass; stop when more work is unlikely to change the result.
+${
+  play.finder.startsWith("rotation") && onPath("engram")
+    ? "Before removing code whose purpose is unclear, run `engram explain <file>:<start>-<end>` to find the conversation that added it: that separates a fallback for a case that can't happen from a real safeguard.\n\n"
+    : ""
+}Start with the shortest credible pass; stop when more work is unlikely to change the result.
 
 Everything here is a default: level, scope, grouping, even doing it at all. When you deviate, say why in one sentence in the PR body.
 

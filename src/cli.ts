@@ -1,12 +1,13 @@
 #!/usr/bin/env node
-import { readFileSync } from "node:fs";
-import { relative } from "node:path";
+import { existsSync, readFileSync, statSync } from "node:fs";
+import { homedir } from "node:os";
+import { join, relative } from "node:path";
 import { parseArgs } from "node:util";
 import { listing, onRequestNote } from "./list.ts";
 import { syncHistory } from "./outcomes.ts";
 import { prompt } from "./prompt.ts";
 import { ownedRepos, repoRoot } from "./repo.ts";
-import { git } from "./run.ts";
+import { git, onPath } from "./run.ts";
 import { recordDecisions, VERDICTS, type Verdict } from "./store.ts";
 
 const USAGE = `workwork: find agent work, sorted by how much human attention it needs
@@ -50,6 +51,7 @@ async function main(): Promise<void> {
 const SRC = process.env.SRC ?? process.cwd();
 
 async function list(all: boolean, options: { play?: string; allHistory?: boolean }): Promise<void> {
+  warnStaleEngram();
   if (!all) {
     const repo = repoRoot(".");
     const { text, count } = await listing(repo, label(repo), options);
@@ -114,6 +116,17 @@ async function history(rejectedOnly: boolean, play: string | undefined): Promise
       `${decision.date.slice(0, 10)}  ${decision.decision.padEnd(6)}  ${decision.id}  (${source})${decision.reason ? `  "${decision.reason}"` : ""}`,
     );
   }
+}
+
+/** Prompts point agents at engram for why code exists; a stale index gives them old answers. */
+function warnStaleEngram(): void {
+  const index = join(homedir(), ".engram", "index.sqlite");
+  if (!onPath("engram") || !existsSync(index)) return;
+  const days = Math.floor((Date.now() - statSync(index).mtimeMs) / 86_400_000);
+  if (days > 7)
+    console.error(
+      `workwork: the engram index is ${days} days old (engram ingest, or engram watch)`,
+    );
 }
 
 function label(repo: string): string {
