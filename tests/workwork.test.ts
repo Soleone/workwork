@@ -102,16 +102,45 @@ describe("decisions", () => {
   test("a deferral hides a candidate until its file changes", async () => {
     const repo = repoWith({ "TODO.md": "- [ ] Add dark mode\n" });
     recordDecisions(repo, [decision(repo, "todo/add-dark-mode", "defer", "after the release")]);
-    expect((await listing(repo, "repo", {})).count).toBe(0);
+    expect((await listing(repo, "repo", { play: "todo" })).count).toBe(0);
 
     commitFiles(repo, { "TODO.md": "- [ ] Add dark mode\n- [ ] Ship it\n" });
-    const { text } = await listing(repo, "repo", {});
+    const { text } = await listing(repo, "repo", { play: "todo" });
     expect(text).toContain("todo/add-dark-mode");
     expect(text).toContain("changed since");
+  });
+  test("a kept scan stays hidden until anything in the repo changes", async () => {
+    const repo = repoWith({ "src/a.ts": "export const a = 1;\n" });
+    recordDecisions(repo, [decision(repo, "docs-drift/.", "keep", "nothing found")]);
+    expect((await listing(repo, "repo", { play: "docs-drift" })).count).toBe(0);
+
+    commitFiles(repo, { "src/b.ts": "export const b = 2;\n" });
+    const { text } = await listing(repo, "repo", { play: "docs-drift" });
+    expect(text).toContain("docs-drift/.");
+    expect(text).toContain("kept 20");
   });
 });
 
 describe("finders", () => {
+  test("rotation: code files largest first, tests apart, vendored files skipped", async () => {
+    const repo = repoWith({
+      ".gitattributes": "src/ui/** linguist-vendored\n",
+      "src/small.ts": "a\n",
+      "src/large.ts": "a\nb\nc\n",
+      "src/ui/button.tsx": "vendored\n",
+      "src/large.test.ts": "test\n",
+      "README.md": "docs\n",
+    });
+    const simplify = await listing(repo, "repo", { play: "simplify" });
+    expect(simplify.text.indexOf("simplify/src/large.ts")).toBeLessThan(
+      simplify.text.indexOf("simplify/src/small.ts"),
+    );
+    expect(simplify.count).toBe(2);
+    const tests = await listing(repo, "repo", { play: "test-trim" });
+    expect(tests.text).toContain("test-trim/src/large.test.ts");
+    expect(tests.count).toBe(1);
+  });
+
   test("spec rules without a citing test are candidates", async () => {
     const repo = repoWith({
       "spec/capture.md":
@@ -125,7 +154,7 @@ describe("finders", () => {
 
   test("pnpm outdated: warnings before the JSON are skipped; below 1.0 a minor bump counts as major", () => {
     const found = parseOutdated(
-      "[WARN] Unsupported engine\n" +
+      '[WARN] Unsupported engine: wanted: {"node":">=24"} (current: {"node":"v22"})\n' +
         JSON.stringify({
           a: { current: "1.2.3", latest: "1.2.4", dependencyType: "dependencies" },
           b: { current: "1.2.3", latest: "1.3.0", dependencyType: "devDependencies" },

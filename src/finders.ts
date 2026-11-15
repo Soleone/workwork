@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { git, onPath, run } from "./run.ts";
 
-/** One thing a finder found. `file` is what a deferral watches: the item comes back once it changes. */
+/** One thing a finder found. `file` is what a decision watches (the whole repo without one): the item comes back once it changes. */
 export type Found = { key: string; title: string; file?: string };
 type Finder = (repo: string, arg: string | undefined) => Promise<Found[]>;
 
@@ -14,6 +14,8 @@ export const finders: Record<string, Finder> = {
   "kit-status": kitStatus,
   "spec-uncited": specUncited,
   todo,
+  scan: async () => [{ key: ".", title: "the whole repo" }],
+  rotation,
 };
 
 // --- outdated
@@ -36,8 +38,8 @@ async function readOutdated(repo: string) {
 }
 
 export function parseOutdated(json: string): (Found & { bump: Bump })[] {
-  // pnpm may print [WARN] lines before the JSON.
-  const start = json.indexOf("{");
+  // pnpm may print [WARN] lines before the JSON, and they can hold braces too ({"node":">=22"}).
+  const start = json.search(/^\{/m);
   const packages = Object.entries(
     JSON.parse(start === -1 ? "{}" : json.slice(start)) as Record<string, OutdatedInfo>,
   );
@@ -214,4 +216,36 @@ function todoItems(markdown: string): Found[] {
     items.push({ key: taken ? `${base}~${taken + 1}` : base, title: item, file: "TODO.md" });
   }
   return items;
+}
+
+// --- rotation
+
+const CODE =
+  /\.(c|cc|cjs|clj|cpp|cs|css|cts|ex|exs|go|h|hpp|java|js|jsx|kt|lua|mjs|mts|php|py|rb|rs|scala|scss|sh|svelte|swift|ts|tsx|vue|zig)$/;
+const TEST = /\.(test|spec)\.[^/]+$|(^|\/)(tests?|__tests__)\//;
+
+/** Every tracked code file (or only test files, with `tests`), largest first. Vendored and generated files are skipped. */
+async function rotation(repo: string, arg: string | undefined): Promise<Found[]> {
+  const files = git(repo, ["ls-files"])
+    .split("\n")
+    .filter(
+      (file) => CODE.test(file) && !file.endsWith(".d.ts") && TEST.test(file) === (arg === "tests"),
+    );
+  if (files.length === 0) return [];
+  const marked = new Set(
+    git(repo, ["check-attr", "--stdin", "linguist-vendored", "linguist-generated"], {
+      input: files.join("\n"),
+    })
+      .split("\n")
+      .filter((line) => /: (set|true)$/.test(line))
+      .map((line) => line.slice(0, line.indexOf(": linguist-"))),
+  );
+  return files
+    .filter((file) => !marked.has(file) && existsSync(join(repo, file)))
+    .map((file) => ({
+      file,
+      lines: readFileSync(join(repo, file), "utf8").trimEnd().split("\n").length,
+    }))
+    .sort((a, b) => b.lines - a.lines)
+    .map(({ file }) => ({ key: file, title: "", file }));
 }

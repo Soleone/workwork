@@ -1,0 +1,9 @@
+---
+name: performance
+level: skim
+finder: scan
+done: before and after numbers are in the PR body
+on-request: true
+---
+
+Think like a performance engineer who trusts only measurements. Find the slowest path that matters to a user (startup, a hot loop, bundle size, a slow query), measure it, improve it, and measure again. Without numbers, raise the level to decide.

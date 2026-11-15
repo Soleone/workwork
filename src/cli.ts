@@ -1,8 +1,8 @@
 #!/usr/bin/env node
-import { homedir } from "node:os";
-import { join, relative } from "node:path";
+import { readFileSync } from "node:fs";
+import { relative } from "node:path";
 import { parseArgs } from "node:util";
-import { listing } from "./list.ts";
+import { listing, onRequestNote } from "./list.ts";
 import { syncHistory } from "./outcomes.ts";
 import { prompt } from "./prompt.ts";
 import { ownedRepos, repoRoot } from "./repo.ts";
@@ -11,10 +11,12 @@ import { recordDecisions, VERDICTS, type Verdict } from "./store.ts";
 
 const USAGE = `workwork: find agent work, sorted by how much human attention it needs
 
-  workwork [--play <name>] [--all-history]     candidates in this repo
-  workwork --all                               candidates in every repo of yours under $SRC
-  workwork prompt <id>                         a self-contained prompt for one candidate
-  workwork decide <id> accept|reject|defer ["reason in the user's words"]
+  workwork [--play <name>] [--all-history]   candidates in this repo
+  workwork --all                             a summary for every repo of yours under $SRC
+                                             (or under this directory when SRC isn't set)
+  workwork prompt <id>                       a self-contained prompt for one candidate
+  workwork decide <id> <verdict> ["reason"]  accept, reject or defer, in the user's words;
+                                             keep when an agent looked and nothing should change
   workwork history [--rejected] [--play <name>]
 
 Levels: auto (a check defines correct; a digest is enough), skim (same behavior, small diff;
@@ -29,10 +31,12 @@ async function main(): Promise<void> {
       "all-history": { type: "boolean" },
       rejected: { type: "boolean" },
       help: { type: "boolean", short: "h" },
+      version: { type: "boolean", short: "v" },
     },
   });
   const [command, ...args] = positionals;
   if (values.help) return console.log(USAGE);
+  if (values.version) return console.log(version());
   if (command === undefined)
     return list(values.all ?? false, { play: values.play, allHistory: values["all-history"] });
   if (command === "prompt")
@@ -42,21 +46,33 @@ async function main(): Promise<void> {
   throw new Error(`unknown command ${command}\n\n${USAGE}`);
 }
 
+// Repos are labeled relative to here.
+const SRC = process.env.SRC ?? process.cwd();
+
 async function list(all: boolean, options: { play?: string; allHistory?: boolean }): Promise<void> {
-  const src = process.env.SRC ?? join(homedir(), "src");
-  const repos = all ? await ownedRepos(src) : [repoRoot(".")];
-  let total = 0;
+  if (!all) {
+    const repo = repoRoot(".");
+    const { text, count } = await listing(repo, label(repo), options);
+    console.log(text);
+    if (count) console.log("\nReady to work: workwork prompt <id>");
+    return;
+  }
+  const repos = await ownedRepos(SRC);
+  if (repos.length === 0) return console.log(`No repos of yours under ${SRC}.`);
   let idle = 0;
   // Repos run one at a time: some finders (kit check) are heavy enough on their own.
   for (const repo of repos) {
-    const label = repo.startsWith(src) ? relative(src, repo) : repo;
-    const { text, count, failed } = await listing(repo, label, options);
-    total += count;
-    if (all && count + failed === 0) idle++;
-    else console.log(`${text}\n`);
+    const { text, count, failed } = await listing(repo, label(repo), {
+      ...options,
+      compact: true,
+    });
+    if (count + failed === 0) idle++;
+    else console.log(text);
   }
-  if (idle) console.log(`${idle} other repos: nothing to do.\n`);
-  if (total) console.log(`Ready to work: ${all ? "cd <repo> && " : ""}workwork prompt <id>`);
+  if (idle) console.log(`${idle} other repos: nothing to do.`);
+  console.log(
+    `\n${[onRequestNote(), "Details: cd <repo> && workwork"].filter(Boolean).join("\n")}`,
+  );
 }
 
 function decide([id, verdict, ...words]: string[]): void {
@@ -76,7 +92,7 @@ function decide([id, verdict, ...words]: string[]): void {
       commit,
       decision: verdict as Verdict,
       reason,
-      source: "chat",
+      source: verdict === "keep" ? "agent" : "chat",
       date,
     },
   ]);
@@ -98,6 +114,15 @@ async function history(rejectedOnly: boolean, play: string | undefined): Promise
       `${decision.date.slice(0, 10)}  ${decision.decision.padEnd(6)}  ${decision.id}  (${source})${decision.reason ? `  "${decision.reason}"` : ""}`,
     );
   }
+}
+
+function label(repo: string): string {
+  const path = relative(SRC, repo);
+  return path && !path.startsWith("..") ? path : repo;
+}
+
+function version(): string {
+  return JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")).version;
 }
 
 function required(value: string | undefined, what: string): string {

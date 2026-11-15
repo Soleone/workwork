@@ -5,13 +5,16 @@ import { syncHistory } from "./outcomes.ts";
 import { LEVELS, loadPlays, type Level, type Play } from "./plays.ts";
 import { repoChecks } from "./repo.ts";
 import { gitQuery } from "./run.ts";
-import { latestDecisions, type Decision } from "./store.ts";
+import { latestDecisions, type Decision, type Verdict } from "./store.ts";
 
 const SHOWN_PER_PLAY = 5;
 
-export type ListOptions = { play?: string; allHistory?: boolean };
+export type ListOptions = { play?: string; allHistory?: boolean; compact?: boolean };
 
-/** One repo's candidates, grouped by play, cheapest attention first. */
+type Row = { id: string; text: string; note?: string; changed?: boolean };
+type Group = { play: Play; level: Level; rows: Row[]; error?: string };
+
+/** One repo's candidates, grouped by play, cheapest attention first. Compact is one line per level, for --all. */
 export async function listing(
   repo: string,
   label: string,
@@ -25,13 +28,9 @@ export async function listing(
   const latest = latestDecisions(history.decisions);
   const checks = repoChecks(repo);
   const churn = churnByFile(repo);
-  const perLevel = new Map<Level, number>();
-  const blocks: string[] = [];
   let hidden = 0;
 
-  for (const { play, candidates, error } of results) {
-    const level = effectiveLevel(play, checks);
-    if (error) blocks.push(`${level.padEnd(6)} ${play.name}: finder failed: ${error}`);
+  const groups: Group[] = results.map(({ play, candidates, error }) => {
     const rows = candidates.flatMap((candidate) => {
       const past = pastNote(repo, candidate, latest.get(candidate.id), history.inProgress);
       if (past.hidden && !options.allHistory) {
@@ -39,39 +38,114 @@ export async function listing(
         return [];
       }
       const text = [clip(candidate.title, 110), signals(repo, candidate, churn), past.note];
-      return [{ id: candidate.id, text: text.filter(Boolean).join(" · ") }];
+      return [
+        {
+          id: candidate.id,
+          text: text.filter(Boolean).join(" · "),
+          note: past.note,
+          changed: past.changed,
+        },
+      ];
     });
-    if (rows.length === 0) continue;
-    perLevel.set(level, (perLevel.get(level) ?? 0) + rows.length);
-    const shown = options.play ? rows : rows.slice(0, SHOWN_PER_PLAY);
-    const width = Math.min(48, Math.max(...shown.map(({ id }) => id.length)));
-    blocks.push(
-      [
-        `${level.padEnd(6)} ${play.name} (${rows.length}) · done: ${play.done}`,
-        ...shown.map(({ id, text }) => `  ${id.padEnd(width)}  ${text}`),
-        ...(rows.length > shown.length
-          ? [`  … ${rows.length - shown.length} more: workwork --play ${play.name}`]
-          : []),
-      ].join("\n"),
-    );
-  }
+    // Changed since its last verdict comes first, then the finder's own order.
+    rows.sort((a, b) => Number(b.changed ?? false) - Number(a.changed ?? false));
+    return { play, level: effectiveLevel(play, checks), rows, error };
+  });
 
-  const count = [...perLevel.values()].reduce((sum, n) => sum + n, 0);
-  const levels = LEVELS.filter((level) => perLevel.has(level)).map(
-    (level) => `${perLevel.get(level)} ${level}`,
-  );
+  const count = groups.reduce((sum, group) => sum + group.rows.length, 0);
+  const levels = LEVELS.flatMap((level) => {
+    const n = groups
+      .filter((group) => group.level === level)
+      .reduce((sum, group) => sum + group.rows.length, 0);
+    return n ? [`${n} ${level}`] : [];
+  });
   const header = count
     ? `${label}: ${count} candidate${count === 1 ? "" : "s"} (${levels.join(", ")}) · checks: ${checks.join(", ") || "none, so nothing is auto"}`
     : `${label}: nothing to do`;
+  const failed = groups.filter((group) => group.error).length;
+  if (options.compact) return { text: [header, ...compactLines(groups)].join("\n"), count, failed };
+
   const unrun = plays
     .filter((play) => !hasFinder(play))
     .map((play) => `${play.name} (${play.finder})`);
   const footer = [
     hidden ? `${hidden} hidden by past decisions or open PRs (--all-history shows them).` : "",
-    unrun.length ? `Not run, finder not built yet: ${unrun.join(", ")}.` : "",
+    unrun.length ? `Not run, no such finder: ${unrun.join(", ")}.` : "",
+    options.play ? "" : onRequestNote(),
   ].filter(Boolean);
-  const failed = results.filter((result) => result.error).length;
+  const blocks = LEVELS.flatMap((level) => {
+    const atLevel = groups.filter((group) => group.level === level);
+    const scans = atLevel.filter((group) => group.play.finder === "scan" && !group.error);
+    return [
+      ...atLevel
+        .filter((group) => !scans.includes(group))
+        .flatMap((group) => fullBlock(group, options.play !== undefined)),
+      ...scanBlock(level, scans),
+    ];
+  });
   return { text: [header, ...blocks, ...footer].join("\n\n"), count, failed };
+}
+
+function fullBlock({ play, level, rows, error }: Group, showAll: boolean): string[] {
+  if (error) return [`${level.padEnd(6)} ${play.name}: finder failed: ${error}`];
+  if (rows.length === 0) return [];
+  const shown = showAll ? rows : rows.slice(0, SHOWN_PER_PLAY);
+  const width = Math.min(48, Math.max(...shown.map(({ id }) => id.length)));
+  return [
+    [
+      `${level.padEnd(6)} ${play.name} (${rows.length}) · done: ${play.done}`,
+      ...shown.map(({ id, text }) => `  ${id.padEnd(width)}  ${text}`),
+      ...(rows.length > shown.length
+        ? [`  … ${rows.length - shown.length} more: workwork --play ${play.name}`]
+        : []),
+    ].join("\n"),
+  ];
+}
+
+/** Scans have one candidate each, the whole repo, so they share a block. */
+function scanBlock(level: Level, scans: Group[]): string[] {
+  const rows = scans.flatMap((group) =>
+    group.rows.map((row) => ({ ...row, done: group.play.done })),
+  );
+  if (rows.length === 0) return [];
+  const width = Math.max(...rows.map(({ id }) => id.length));
+  return [
+    [
+      `${level.padEnd(6)} scans (${rows.length}) · each searches the whole repo · done:`,
+      ...rows.map(
+        ({ id, done, note }) =>
+          `  ${id.padEnd(width)}  ${[done, note].filter(Boolean).join(" · ")}`,
+      ),
+    ].join("\n"),
+  ];
+}
+
+function compactLines(groups: Group[]): string[] {
+  const lines = LEVELS.flatMap((level) => {
+    const atLevel = groups.filter((group) => group.level === level && group.rows.length);
+    const scans = atLevel.filter((group) => group.play.finder === "scan").length;
+    const plays = [
+      ...atLevel
+        .filter((group) => group.play.finder !== "scan")
+        .map((group) => `${group.play.name} ${group.rows.length}`),
+      ...(scans ? [`${scans} scan${scans === 1 ? "" : "s"}`] : []),
+    ];
+    return plays.length ? [`  ${level.padEnd(6)} ${plays.join(" · ")}`] : [];
+  });
+  const failures = groups.filter((group) => group.error);
+  if (failures.length)
+    lines.push(
+      `  failed ${failures.map((group) => `${group.play.name} (${group.error})`).join(" · ")}`,
+    );
+  return lines;
+}
+
+/** Plays kept out of the default listing, so they can still be found. */
+export function onRequestNote(): string {
+  const names = loadPlays()
+    .filter((play) => play.onRequest)
+    .map((play) => play.name);
+  return names.length ? `On request: ${names.join(", ")} (workwork --play <name>).` : "";
 }
 
 function selectPlays(name: string | undefined): Play[] {
@@ -83,18 +157,24 @@ function selectPlays(name: string | undefined): Play[] {
   return [play];
 }
 
-/** Rejections and open PRs hide a candidate; a deferral hides it until its file changes. */
+const PAST: Record<Verdict, string> = {
+  accept: "accepted",
+  reject: "rejected",
+  defer: "deferred",
+  keep: "kept",
+};
+
+/** Rejections and open PRs hide a candidate; any other verdict hides it until its file changes. */
 function pastNote(
   repo: string,
   candidate: Candidate,
   decision: Decision | undefined,
   inProgress: Set<string>,
-): { hidden: boolean; note?: string } {
+): { hidden: boolean; note?: string; changed?: boolean } {
   if (inProgress.has(candidate.id)) return { hidden: true, note: "open PR or issue" };
   if (!decision) return { hidden: false };
-  const said = `${decision.date.slice(0, 10)}${decision.reason ? `: "${clip(decision.reason, 80)}"` : ""}`;
-  if (decision.decision === "reject") return { hidden: true, note: `rejected ${said}` };
-  if (decision.decision === "accept") return { hidden: false, note: `accepted ${said}` };
+  const note = `${PAST[decision.decision]} ${decision.date.slice(0, 10)}${decision.reason ? `: "${clip(decision.reason, 80)}"` : ""}`;
+  if (decision.decision === "reject") return { hidden: true, note };
   const changed =
     gitQuery(repo, [
       "diff",
@@ -104,8 +184,8 @@ function pastNote(
       ...(candidate.file ? [candidate.file] : []),
     ]) === undefined;
   return changed
-    ? { hidden: false, note: `deferred ${said}, changed since` }
-    : { hidden: true, note: `deferred ${said}` };
+    ? { hidden: false, note: `${note}, changed since`, changed }
+    : { hidden: true, note };
 }
 
 /** Size and churn, for candidates that are about one file (not, say, a package listed in package.json). */
@@ -114,8 +194,9 @@ function signals(repo: string, candidate: Candidate, churn: Map<string, number>)
   if (!file || (key !== file && !key.startsWith(`${file}#`))) return "";
   const path = join(repo, file);
   if (!existsSync(path)) return "file missing";
-  const lines = readFileSync(path, "utf8").split("\n").length;
-  return `${lines} lines, ${churn.get(file) ?? 0} commits/90d`;
+  const lines = readFileSync(path, "utf8").trimEnd().split("\n").length;
+  const commits = churn.get(file) ?? 0;
+  return `${lines} line${lines === 1 ? "" : "s"}, ${commits} commit${commits === 1 ? "" : "s"}/90d`;
 }
 
 function churnByFile(repo: string): Map<string, number> {

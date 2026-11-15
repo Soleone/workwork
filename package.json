@@ -2,7 +2,22 @@
   "name": "@soleone/workwork",
   "version": "0.1.0",
   "description": "Find agent work across your repos, sorted by how much human attention it needs.",
+  "keywords": [
+    "agents",
+    "cli",
+    "code-quality",
+    "coding-agent",
+    "maintenance",
+    "pull-requests"
+  ],
+  "homepage": "https://github.com/Soleone/workwork#readme",
+  "bugs": "https://github.com/Soleone/workwork/issues",
   "license": "MIT",
+  "author": "Soleone",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Soleone/workwork.git"
+  },
   "bin": {
     "workwork": "dist/cli.mjs"
   },

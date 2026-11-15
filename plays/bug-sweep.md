@@ -1,0 +1,8 @@
+---
+name: bug-sweep
+level: skim
+finder: scan
+done: each fix comes with a test that failed before it
+---
+
+Think like an independent senior reviewer looking for correctness and security bugs. Few high-signal findings, none manufactured: each must have a concrete input or state that produces a wrong result, a crash or an exposure. Fix one with a test that fails before the fix and passes after. Without such a test, or when the fix changes intended behavior, don't fix it: raise the level to decide and open an issue.

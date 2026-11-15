@@ -6,7 +6,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { git, gitQuery } from "./run.ts";
 
-export const VERDICTS = ["accept", "reject", "defer"] as const;
+/** keep: an agent looked and nothing should change. Every verdict but reject lasts until the code changes. */
+export const VERDICTS = ["accept", "reject", "defer", "keep"] as const;
 export type Verdict = (typeof VERDICTS)[number];
 
 export type Decision = {
@@ -16,7 +17,7 @@ export type Decision = {
   commit: string;
   decision: Verdict;
   reason: string;
-  source: "pr" | "issue" | "chat";
+  source: "pr" | "issue" | "chat" | "agent";
   /** The PR or issue number, for decisions folded in from GitHub. */
   ref?: string;
   date: string;

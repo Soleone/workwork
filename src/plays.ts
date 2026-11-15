@@ -19,14 +19,16 @@ export type Play = {
 
 const BUILT_IN = fileURLToPath(new URL("../plays", import.meta.url));
 
-function dataDir(): string {
-  return join(process.env.DATA ?? join(homedir(), "data"), "apps", "workwork");
+/** The user's plays and settings: $DATA/apps/workwork when DATA is set, else ~/.config/workwork. */
+export function configDir(): string {
+  if (process.env.DATA) return join(process.env.DATA, "apps", "workwork");
+  return join(process.env.XDG_CONFIG_HOME ?? join(homedir(), ".config"), "workwork");
 }
 
 /** Built-in plays, then the user's: a user play replaces the built-in one of the same name. */
 export function loadPlays(): Play[] {
   const byName = new Map<string, Play>();
-  for (const dir of [BUILT_IN, join(dataDir(), "plays")]) {
+  for (const dir of [BUILT_IN, join(configDir(), "plays")]) {
     if (!existsSync(dir)) continue;
     for (const file of readdirSync(dir).filter((name) => name.endsWith(".md"))) {
       const play = parsePlay(join(dir, file));

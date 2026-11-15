@@ -1,5 +1,8 @@
 {
   "$schema": "https://unpkg.com/release-it@21/schema/release-it.json",
+  "hooks": {
+    "before:init": "vp check && vp test run && pnpm exec knip"
+  },
   "git": {
     "requireBranch": "main",
     "commitMessage": "chore(release): v${version}",
@@ -10,7 +13,9 @@
   },
   "plugins": {
     "@release-it/conventional-changelog": {
-      "preset": { "name": "conventionalcommits" },
+      "preset": {
+        "name": "conventionalcommits"
+      },
       "infile": "CHANGELOG.md",
       "header": "# Changelog",
       "ignoreRecommendedBump": true

@@ -3,15 +3,23 @@
 Finds meaningful work in a repo, or across your repos, for whichever coding agent has tokens to spare, and sorts it by the one real bottleneck: how much human attention each piece needs.
 
 ```sh
+npm install -g @soleone/workwork
+```
+
+Like git, it works in whatever repo you're in, on any machine:
+
+```sh
 workwork                         # candidates in this repo, grouped by play
-workwork --play spec-uncited     # one play, every candidate (also runs on-request plays like dep-major)
-workwork --all                   # every repo of yours under $SRC (skips opensource/, tries/, trash/)
+workwork --play simplify         # one play, every candidate (also runs on-request plays like performance)
+workwork --all                   # a summary for every repo of yours under $SRC, or under this directory
 workwork prompt <id>             # a self-contained prompt for one candidate, for any agent
 workwork decide <id> reject "the theme kit already does this"
 workwork history [--rejected] [--play <name>]
 ```
 
-workwork finds, ranks and remembers; it doesn't run agents (yet). The agent picks by expected value per token, and everything a play sets is a default it may override with a one-sentence reason.
+workwork finds, ranks and remembers; it doesn't run agents (yet). Hand `workwork prompt <id>` to claude, pi, codex or anything else that reads a prompt. The agent picks by expected value per token, and everything a play sets is a default it may override with a one-sentence reason.
+
+Needs node 22+ and git. `gh` (logged in, or `GH_TOKEN` set) is needed for `--all` and for reading PR and issue outcomes; without it the stored decisions still count. pnpm, knip and kit are used when a repo uses them.
 
 ## Attention levels
 
@@ -38,15 +46,25 @@ done: checks pass; each refactor names the states and transitions it made explic
 Think like a senior architect. Search the codebase for implicit state machines ...
 ```
 
-Built-in plays are in [plays/](plays/). Your own go in `$DATA/apps/workwork/plays/` (default `~/data/apps/workwork/plays/`) and replace a built-in one of the same name. `on-request: true` keeps a play out of the default listing.
+Built-in plays are in [plays/](plays/). Your own go in `~/.config/workwork/plays/` (or `$DATA/apps/workwork/plays/` when `DATA` is set) and replace a built-in one of the same name. `on-request: true` keeps a play out of the default listing.
 
-Finders built so far: `outdated <patch|minor|major>`, `knip`, `kit-drift`, `kit-status`, `spec-uncited`, `todo`. Plays whose finder isn't built yet (`scan`, `rotation`) are listed as not run.
+Finders:
+
+- `scan` (the default): one candidate per repo; the agent searches with the play's prompt and gives each finding its own id.
+- `rotation`: every tracked code file, largest first (`rotation tests` for test files). Files marked `linguist-vendored` or `linguist-generated` in `.gitattributes` are skipped.
+- `outdated <patch|minor|major>`, `knip`, `kit-drift`, `kit-status`, `spec-uncited`, `todo`: mechanical sources.
 
 ## Decisions
 
-Decisions come from conversation (`workwork decide`, with the user's own words) and from PRs and issues labeled `workwork`: merged or completed is accept, closed is reject with the last comment as the reason. Commits carry a `Workwork: <id>` trailer, which is how a PR maps back to candidates. A rejection hides a candidate, a deferral hides it until its file changes, and an open PR hides it while it's in progress. `--all-history` shows them all with their reasons.
+Decisions come from conversation (`workwork decide`, with the user's own words), from agents (`keep`: looked, nothing to change) and from PRs and issues labeled `workwork`: merged or completed is accept, closed is reject with the last comment as the reason. Commits and issues carry a `Workwork: <id>` trailer, which is how they map back to candidates.
+
+A rejection hides a candidate. Accept, defer and keep hide it until its file changes (the whole repo, for a scan), and then it comes back first. An open PR or issue hides it while it's in progress. `--all-history` shows them all with their reasons.
 
 They're stored per repo on an orphan `meta` branch, in `workwork/decisions.jsonl`, written with git plumbing so the working tree is never touched, and pushed so every machine shares them. Concurrent appends are unioned. In a public repo the reasons are public.
+
+## --all
+
+`--all` lists repos under `$SRC` (or the current directory) whose origin is one of your own GitHub repos, not a fork and not archived. Folder names listed one per line in `~/.config/workwork/skip` aren't searched (say, `tries`).
 
 ## Development
 
@@ -55,6 +73,7 @@ pnpm install
 vp check && vp test run && pnpm exec knip
 node src/cli.ts            # run from source
 vp pack                    # build dist/cli.mjs
+pnpm release               # checks, changelog, tag, npm publish
 ```
 
 `prompts/lean.md` is a copy of the lean skill's body; refresh it when the skill changes.
