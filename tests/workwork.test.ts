@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeAll, describe, expect, test } from "vite-plus/test";
 import { parseKitCheck, parseKnip, parseOutdated } from "../src/finders.ts";
-import { listing } from "../src/list.ts";
+import { listed, listing } from "../src/list.ts";
 import { readDecisions, recordDecisions, type Decision } from "../src/store.ts";
 
 const scratch = mkdtempSync(join(tmpdir(), "workwork-test-"));
@@ -97,6 +97,29 @@ describe("decisions", () => {
     const all = await listing(repo, "repo", { allHistory: true });
     expect(all.text).toContain("rejected");
     expect(all.text).toContain('"the theme kit does it"');
+  });
+
+  test("--json lists only shown candidates, cheapest attention first", async () => {
+    const repo = repoWith({
+      "TODO.md": "- [ ] Add dark mode\n- [ ] Ship it\n",
+      "src/a.ts": "export const a = 1;\n",
+    });
+    recordDecisions(repo, [decision(repo, "todo/add-dark-mode", "reject")]);
+
+    const { candidates, errors } = await listed(repo, "repo", {});
+    expect(errors).toEqual([]);
+    expect(candidates).toContainEqual({
+      repo,
+      label: "repo",
+      id: "todo/ship-it",
+      play: "todo",
+      level: "decide",
+      title: "Ship it",
+    });
+    expect(candidates.map(({ id }) => id)).not.toContain("todo/add-dark-mode");
+    const levels = candidates.map(({ level }) => level);
+    expect(levels).toContain("skim");
+    expect(levels.indexOf("decide")).toBeGreaterThan(levels.lastIndexOf("skim"));
   });
 
   test("a deferral hides a candidate until its file changes", async () => {

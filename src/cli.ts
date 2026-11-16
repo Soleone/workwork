@@ -3,7 +3,7 @@ import { existsSync, readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, relative } from "node:path";
 import { parseArgs } from "node:util";
-import { listing, onRequestNote } from "./list.ts";
+import { listed, listing, onRequestNote, type Listed } from "./list.ts";
 import { syncHistory } from "./outcomes.ts";
 import { prompt } from "./prompt.ts";
 import { ownedRepos, repoRoot } from "./repo.ts";
@@ -15,6 +15,8 @@ const USAGE = `workwork: find agent work, sorted by how much human attention it 
   workwork [--play <name>] [--all-history]   candidates in this repo
   workwork --all                             a summary for every repo of yours under $SRC
                                              (or under this directory when SRC isn't set)
+  workwork [--all] --json                    the shown candidates as a JSON array, for scripts;
+                                             failed finders go to stderr
   workwork prompt <id>                       a self-contained prompt for one candidate
   workwork decide <id> <verdict> ["reason"]  accept, reject or defer, in the user's words;
                                              keep when an agent looked and nothing should change
@@ -28,6 +30,7 @@ async function main(): Promise<void> {
     allowPositionals: true,
     options: {
       all: { type: "boolean" },
+      json: { type: "boolean" },
       play: { type: "string" },
       "all-history": { type: "boolean" },
       rejected: { type: "boolean" },
@@ -38,8 +41,9 @@ async function main(): Promise<void> {
   const [command, ...args] = positionals;
   if (values.help) return console.log(USAGE);
   if (values.version) return console.log(version());
-  if (command === undefined)
-    return list(values.all ?? false, { play: values.play, allHistory: values["all-history"] });
+  const options = { play: values.play, allHistory: values["all-history"] };
+  if (command === undefined && values.json) return json(values.all ?? false, options);
+  if (command === undefined) return list(values.all ?? false, options);
   if (command === "prompt")
     return console.log(await prompt(repoRoot("."), required(args[0], "an id")));
   if (command === "decide") return decide(args);
@@ -75,6 +79,17 @@ async function list(all: boolean, options: { play?: string; allHistory?: boolean
   console.log(
     `\n${[onRequestNote(), "Details: cd <repo> && workwork"].filter(Boolean).join("\n")}`,
   );
+}
+
+async function json(all: boolean, options: { play?: string; allHistory?: boolean }): Promise<void> {
+  const repos = all ? await ownedRepos(SRC) : [repoRoot(".")];
+  const candidates: Listed[] = [];
+  for (const repo of repos) {
+    const found = await listed(repo, label(repo), options);
+    candidates.push(...found.candidates);
+    for (const error of found.errors) console.error(`workwork: ${error}`);
+  }
+  console.log(JSON.stringify(candidates, null, 2));
 }
 
 function decide([id, verdict, ...words]: string[]): void {

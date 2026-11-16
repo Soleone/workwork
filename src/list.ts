@@ -11,8 +11,38 @@ const SHOWN_PER_PLAY = 5;
 
 export type ListOptions = { play?: string; allHistory?: boolean; compact?: boolean };
 
-type Row = { id: string; text: string; note?: string; changed?: boolean };
+type Row = { id: string; title: string; text: string; note?: string; changed?: boolean };
 type Group = { play: Play; level: Level; rows: Row[]; error?: string };
+
+/** A shown candidate, for --json. `repo` is absolute so a script can run `workwork prompt` there. */
+export type Listed = {
+  repo: string;
+  label: string;
+  id: string;
+  play: string;
+  level: Level;
+  title: string;
+};
+
+/** One repo's shown candidates, cheapest attention first, with failed finders kept apart. */
+export async function listed(
+  repo: string,
+  label: string,
+  options: ListOptions,
+): Promise<{ candidates: Listed[]; errors: string[] }> {
+  const { groups } = await grouped(repo, options);
+  const candidates = LEVELS.flatMap((level) =>
+    groups
+      .filter((group) => group.level === level)
+      .flatMap(({ play, rows }) =>
+        rows.map(({ id, title }) => ({ repo, label, id, play: play.name, level, title })),
+      ),
+  );
+  const errors = groups.flatMap(({ play, error }) =>
+    error ? [`${label} ${play.name}: finder failed: ${error}`] : [],
+  );
+  return { candidates, errors };
+}
 
 /** One repo's candidates, grouped by play, cheapest attention first. Compact is one line per level, for --all. */
 export async function listing(
@@ -20,38 +50,7 @@ export async function listing(
   label: string,
   options: ListOptions,
 ): Promise<{ text: string; count: number; failed: number }> {
-  const plays = selectPlays(options.play);
-  const [results, history] = await Promise.all([
-    findCandidates(repo, plays.filter(hasFinder)),
-    syncHistory(repo),
-  ]);
-  const latest = latestDecisions(history.decisions);
-  const checks = repoChecks(repo);
-  const churn = churnByFile(repo);
-  let hidden = 0;
-
-  const groups: Group[] = results.map(({ play, candidates, error }) => {
-    const rows = candidates.flatMap((candidate) => {
-      const past = pastNote(repo, candidate, latest.get(candidate.id), history.inProgress);
-      if (past.hidden && !options.allHistory) {
-        hidden++;
-        return [];
-      }
-      const text = [clip(candidate.title, 110), signals(repo, candidate, churn), past.note];
-      return [
-        {
-          id: candidate.id,
-          text: text.filter(Boolean).join(" · "),
-          note: past.note,
-          changed: past.changed,
-        },
-      ];
-    });
-    // Changed since its last verdict comes first, then the finder's own order.
-    rows.sort((a, b) => Number(b.changed ?? false) - Number(a.changed ?? false));
-    return { play, level: effectiveLevel(play, checks), rows, error };
-  });
-
+  const { plays, groups, hidden, checks } = await grouped(repo, options);
   const count = groups.reduce((sum, group) => sum + group.rows.length, 0);
   const levels = LEVELS.flatMap((level) => {
     const n = groups
@@ -84,6 +83,42 @@ export async function listing(
     ];
   });
   return { text: [header, ...blocks, ...footer].join("\n\n"), count, failed };
+}
+
+async function grouped(repo: string, options: ListOptions) {
+  const plays = selectPlays(options.play);
+  const [results, history] = await Promise.all([
+    findCandidates(repo, plays.filter(hasFinder)),
+    syncHistory(repo),
+  ]);
+  const latest = latestDecisions(history.decisions);
+  const checks = repoChecks(repo);
+  const churn = churnByFile(repo);
+  let hidden = 0;
+
+  const groups: Group[] = results.map(({ play, candidates, error }) => {
+    const rows = candidates.flatMap((candidate) => {
+      const past = pastNote(repo, candidate, latest.get(candidate.id), history.inProgress);
+      if (past.hidden && !options.allHistory) {
+        hidden++;
+        return [];
+      }
+      const text = [clip(candidate.title, 110), signals(repo, candidate, churn), past.note];
+      return [
+        {
+          id: candidate.id,
+          title: candidate.title,
+          text: text.filter(Boolean).join(" · "),
+          note: past.note,
+          changed: past.changed,
+        },
+      ];
+    });
+    // Changed since its last verdict comes first, then the finder's own order.
+    rows.sort((a, b) => Number(b.changed ?? false) - Number(a.changed ?? false));
+    return { play, level: effectiveLevel(play, checks), rows, error };
+  });
+  return { plays, groups, hidden, checks };
 }
 
 function fullBlock({ play, level, rows, error }: Group, showAll: boolean): string[] {

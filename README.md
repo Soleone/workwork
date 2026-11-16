@@ -12,6 +12,7 @@ Like git, it works in whatever repo you're in, on any machine:
 workwork                         # candidates in this repo, grouped by play
 workwork --play simplify         # one play, every candidate (also runs on-request plays like performance)
 workwork --all                   # a summary for every repo of yours under $SRC, or under this directory
+workwork --all --json            # the same candidates as a JSON array, for scripts
 workwork prompt <id>             # a self-contained prompt for one candidate, for any agent
 workwork decide <id> reject "the theme kit already does this"
 workwork history [--rejected] [--play <name>]
@@ -20,6 +21,8 @@ workwork history [--rejected] [--play <name>]
 workwork finds, ranks and remembers; it doesn't run agents (yet). Hand `workwork prompt <id>` to claude, pi, codex or anything else that reads a prompt. The agent picks by expected value per token, and everything a play sets is a default it may override with a one-sentence reason.
 
 Needs node 22+ and git. `gh` (logged in, or `GH_TOKEN` set) is needed for `--all` and for reading PR and issue outcomes; without it the stored decisions still count. pnpm, knip and kit are used when a repo uses them.
+
+`--json` (with or without `--all`) prints the candidates the listing would show as an array of `{repo, label, id, play, level, title}`, cheapest attention first, with `repo` as an absolute path. A finder that fails is reported on stderr, never in the array.
 
 ## Attention levels
 
