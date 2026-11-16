@@ -1,6 +1,13 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { effectiveLevel, findCandidates, hasFinder, type Candidate } from "./candidates.ts";
+import {
+  effectiveLevel,
+  findCandidates,
+  hasFinder,
+  kindOf,
+  type Candidate,
+  type Kind,
+} from "./candidates.ts";
 import { syncHistory } from "./outcomes.ts";
 import { LEVELS, loadPlays, type Level, type Play } from "./plays.ts";
 import { repoChecks } from "./repo.ts";
@@ -21,6 +28,7 @@ export type Listed = {
   id: string;
   play: string;
   level: Level;
+  kind: Kind;
   title: string;
 };
 
@@ -35,7 +43,15 @@ export async function listed(
     groups
       .filter((group) => group.level === level)
       .flatMap(({ play, rows }) =>
-        rows.map(({ id, title }) => ({ repo, label, id, play: play.name, level, title })),
+        rows.map(({ id, title }) => ({
+          repo,
+          label,
+          id,
+          play: play.name,
+          level,
+          kind: kindOf(play),
+          title,
+        })),
       ),
   );
   const errors = groups.flatMap(({ play, error }) =>

@@ -26,6 +26,18 @@ export function findCandidates(repo: string, plays: Play[]): Promise<PlayResult[
   );
 }
 
+/**
+ * What a candidate is based on. finding: a tool reported this exact thing (an outdated package, an
+ * unused export, a TODO). rotation: a file taken in turn, with nothing known to be wrong in it.
+ * scan: the whole repo, for an agent to search. Rotations and scans say where to look, not that anyone has.
+ */
+export type Kind = "finding" | "rotation" | "scan";
+
+export function kindOf(play: Play): Kind {
+  const { name } = finderOf(play);
+  return name === "scan" || name === "rotation" ? name : "finding";
+}
+
 /** auto requires a mechanical check that passed, so a repo without checks gets skim instead. */
 export function effectiveLevel(play: Play, checks: string[]): Level {
   return play.level === "auto" && checks.length === 0 ? "skim" : play.level;

@@ -114,9 +114,14 @@ describe("decisions", () => {
       id: "todo/ship-it",
       play: "todo",
       level: "decide",
+      kind: "finding",
       title: "Ship it",
     });
     expect(candidates.map(({ id }) => id)).not.toContain("todo/add-dark-mode");
+    // Only the TODO line is something a tool found; the rest only say where an agent could look.
+    const kind = (id: string) => candidates.find((candidate) => candidate.id === id)?.kind;
+    expect(kind("clarify/src/a.ts")).toBe("rotation");
+    expect(kind("bug-sweep/.")).toBe("scan");
     const levels = candidates.map(({ level }) => level);
     expect(levels).toContain("skim");
     expect(levels.indexOf("decide")).toBeGreaterThan(levels.lastIndexOf("skim"));

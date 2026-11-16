@@ -22,7 +22,9 @@ workwork finds, ranks and remembers; it doesn't run agents (yet). Hand `workwork
 
 Needs node 22+ and git. `gh` (logged in, or `GH_TOKEN` set) is needed for `--all` and for reading PR and issue outcomes; without it the stored decisions still count. pnpm, knip and kit are used when a repo uses them.
 
-`--json` (with or without `--all`) prints the candidates the listing would show as an array of `{repo, label, id, play, level, title}`, cheapest attention first, with `repo` as an absolute path. A finder that fails is reported on stderr, never in the array.
+`--json` (with or without `--all`) prints the candidates the listing would show as an array of `{repo, label, id, play, level, kind, title}`, cheapest attention first, with `repo` as an absolute path. A finder that fails is reported on stderr, never in the array.
+
+`kind` says what a candidate rests on. `finding`: a tool reported this exact thing (an outdated package, an unused export, a TODO line). `rotation`: one file in turn, with nothing known to be wrong in it. `scan`: the whole repo, for an agent to search. A rotation or a scan says where to look, not that anyone has looked; most of a big repo's candidates are rotations.
 
 ## Attention levels
 
