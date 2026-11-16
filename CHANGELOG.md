@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.1.1](https://github.com/Soleone/workwork/compare/v0.1.0...v0.1.1) (2026-11-16)
+
+### Features
+
+* --json lists the shown candidates for scripts ([f913ee6](https://github.com/Soleone/workwork/commit/f913ee6e01f69333d545572bc9854b8230b60e2d))
+
 ## 0.1.0 (2026-11-15)
 
 ### Features
