@@ -91,8 +91,15 @@ function usesKnip(repo: string): boolean {
   return Boolean({ ...dependencies, ...devDependencies }.knip);
 }
 
-export function parseKnip(json: string): Found[] {
-  const { issues } = JSON.parse(json) as { issues: KnipIssue[] };
+/**
+ * knip's JSON report is one line, but `pnpm exec` may print an install before it on the same
+ * stdout: pnpm 11 installs out-of-date dependencies first ("✓ Lockfile passes supply-chain
+ * policies", "Done in 1.4s"). Without a report line, the error names what was printed instead.
+ */
+export function parseKnip(stdout: string): Found[] {
+  const report = stdout.split("\n").find((line) => line.startsWith("{"));
+  if (!report) throw new Error(`knip printed no JSON report: ${lastLine(stdout)}`);
+  const { issues } = JSON.parse(report) as { issues: KnipIssue[] };
   return issues.flatMap(({ file, files, exports, types }) => [
     ...(files.length ? [{ key: file, title: "unused file", file }] : []),
     ...[...exports, ...types].map(({ name, line }) => ({

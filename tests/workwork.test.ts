@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeAll, describe, expect, test } from "vite-plus/test";
@@ -201,6 +201,24 @@ describe("finders", () => {
       ],
     });
     expect(parseKnip(json).map((found) => found.key)).toEqual(["src/orphan.ts", "src/extra.ts#x"]);
+  });
+
+  test("knip: the report after an install pnpm 11 printed on the same stdout", () => {
+    // Real `pnpm exec knip --no-progress --reporter json` output from pnpm 11.22 with stale dependencies.
+    const stdout = readFileSync(
+      join(import.meta.dirname, "fixtures/knip-after-pnpm-install.txt"),
+      "utf8",
+    );
+    expect(stdout.startsWith("✓ Lockfile")).toBe(true);
+    expect(parseKnip(stdout).map((found) => found.key)).toEqual(["src/a.ts#unused"]);
+  });
+
+  test("knip: output without a report is an error naming what was printed", () => {
+    expect(() =>
+      parseKnip(
+        "✓ Lockfile passes supply-chain policies (verified 7s ago)\nDone in 1.4s using pnpm v11.22.0\n",
+      ),
+    ).toThrow("knip printed no JSON report: Done in 1.4s using pnpm v11.22.0");
   });
 
   test("kit check: drifted and missing vendored files", () => {

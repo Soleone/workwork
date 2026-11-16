@@ -1,0 +1,11 @@
+✓ Lockfile passes supply-chain policies (verified 7s ago)
+Progress: resolved 1, reused 0, downloaded 0, added 0
+Packages: +6 -4
+++++++----
+Progress: resolved 403, reused 272, downloaded 6, added 6, done
+
+devDependencies:
++ is-odd 3.0.1
+
+Done in 1.4s using pnpm v11.22.0
+{"issues":[{"file":"package.json","binaries":[],"catalog":[],"catalogReferences":[],"dependencies":[],"devDependencies":[{"name":"@release-it/conventional-changelog","line":41,"col":6,"pos":901},{"name":"is-number","line":47,"col":6,"pos":1093},{"name":"is-odd","line":48,"col":6,"pos":1120}],"duplicates":[],"enumMembers":[],"exports":[],"files":[],"namespaceMembers":[],"optionalPeerDependencies":[],"subpaths":[],"types":[],"unlisted":[],"unresolved":[]},{"file":"src/a.ts","binaries":[],"catalog":[],"catalogReferences":[],"dependencies":[],"devDependencies":[],"duplicates":[],"enumMembers":[],"exports":[{"name":"unused","line":1,"col":37,"pos":36}],"files":[],"namespaceMembers":[],"optionalPeerDependencies":[],"subpaths":[],"types":[],"unlisted":[],"unresolved":[]}]}
