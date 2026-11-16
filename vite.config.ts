@@ -11,6 +11,7 @@ export default defineConfig({
       typeCheck: true,
     },
   },
-  // A copy of the lean skill, kept byte-for-byte so it diffs cleanly against the original.
-  fmt: { ignorePatterns: ["prompts/**"] },
+  // The lean skill copy is kept byte-for-byte so it diffs cleanly against the original, and
+  // release-it writes the changelog in its own style.
+  fmt: { ignorePatterns: ["prompts/**", "CHANGELOG.md"] },
 });
