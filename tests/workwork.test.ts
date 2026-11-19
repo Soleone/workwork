@@ -1,9 +1,9 @@
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { delimiter, join } from "node:path";
 import { beforeAll, describe, expect, test } from "vite-plus/test";
-import { parseKitCheck, parseKnip, parseOutdated } from "../src/finders.ts";
+import { finders, parseKitCheck, parseKnip, parseOutdated } from "../src/finders.ts";
 import { listed, listing } from "../src/list.ts";
 import { loadPlays } from "../src/plays.ts";
 import { readDecisions, recordDecisions, type Decision } from "../src/store.ts";
@@ -193,6 +193,22 @@ describe("finders", () => {
     const { text } = await listing(repo, "repo", { play: "spec-uncited" });
     expect(text).toContain("spec-uncited/capture.save");
     expect(text).not.toContain("spec-uncited/capture.open");
+  });
+
+  test("pnpm outdated: a failed command without JSON is reported", async () => {
+    const repo = repoWith({ "pnpm-lock.yaml": "lockfileVersion: '9.0'\n" });
+    const bin = join(scratch, "failing-pnpm");
+    mkdirSync(bin);
+    const executable = join(bin, "pnpm");
+    writeFileSync(executable, "#!/bin/sh\necho registry unavailable >&2\nexit 1\n");
+    chmodSync(executable, 0o755);
+    const path = process.env.PATH;
+    process.env.PATH = [bin, path].filter(Boolean).join(delimiter);
+    try {
+      await expect(finders.outdated(repo, "patch")).rejects.toThrow("registry unavailable");
+    } finally {
+      process.env.PATH = path;
+    }
   });
 
   test("pnpm outdated: warnings before the JSON are skipped; below 1.0 a minor bump counts as major", () => {
