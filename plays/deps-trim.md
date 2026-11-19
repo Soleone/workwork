@@ -1,6 +1,7 @@
 ---
 name: deps-trim
 level: skim
+description: Removes dependencies that are unused or do something trivial the code can do itself.
 finder: scan
 done: checks pass; each removed dependency names what replaced it
 ---

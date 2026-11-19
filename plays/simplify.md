@@ -1,6 +1,7 @@
 ---
 name: simplify
 level: skim
+description: Cuts dead paths, one-use layers and needless checks from one file, without changing behavior.
 finder: rotation
 done: checks pass; behavior is unchanged
 ---

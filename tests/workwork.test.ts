@@ -1,10 +1,11 @@
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeAll, describe, expect, test } from "vite-plus/test";
 import { parseKitCheck, parseKnip, parseOutdated } from "../src/finders.ts";
 import { listed, listing } from "../src/list.ts";
+import { loadPlays } from "../src/plays.ts";
 import { readDecisions, recordDecisions, type Decision } from "../src/store.ts";
 
 const scratch = mkdtempSync(join(tmpdir(), "workwork-test-"));
@@ -146,6 +147,20 @@ describe("decisions", () => {
     const { text } = await listing(repo, "repo", { play: "docs-drift" });
     expect(text).toContain("docs-drift/.");
     expect(text).toContain("kept 20");
+  });
+});
+
+describe("plays", () => {
+  test("a play without a description is an error naming its file", () => {
+    const dir = join(scratch, "data", "apps", "workwork", "plays");
+    mkdirSync(dir, { recursive: true });
+    const file = join(dir, "vague.md");
+    writeFileSync(file, "---\nname: vague\nlevel: skim\ndone: done\n---\n\nDo things.\n");
+    try {
+      expect(() => loadPlays()).toThrow(`${file}: name, description and done are required`);
+    } finally {
+      rmSync(file);
+    }
   });
 });
 

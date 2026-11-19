@@ -1,6 +1,7 @@
 ---
 name: memory
 level: skim
+description: Finds and fixes unneeded memory growth, with heap or RSS measured before and after.
 finder: scan
 done: heap or RSS before and after are in the PR body
 on-request: true

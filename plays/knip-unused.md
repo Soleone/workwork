@@ -1,6 +1,7 @@
 ---
 name: knip-unused
 level: auto
+description: Deletes a file or export that knip reports as unused.
 finder: knip
 done: knip no longer reports it and checks pass
 ---

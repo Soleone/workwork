@@ -1,6 +1,7 @@
 ---
 name: test-trim
 level: skim
+description: Removes tests from one file that pin implementation details or repeat coverage found elsewhere.
 finder: rotation tests
 done: the suite still passes; each removed test names what still covers its behavior
 ---

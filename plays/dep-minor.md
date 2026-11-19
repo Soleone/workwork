@@ -1,6 +1,7 @@
 ---
 name: dep-minor
 level: skim
+description: Upgrades a dependency to its latest minor version, with changelog notes for anything this repo uses.
 finder: outdated minor
 done: checks pass; the PR body has changelog notes for anything this repo uses that changed
 ---

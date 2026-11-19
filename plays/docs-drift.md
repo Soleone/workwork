@@ -1,6 +1,7 @@
 ---
 name: docs-drift
 level: skim
+description: Fixes places where the README or docs disagree with what the code actually does.
 finder: scan
 done: every changed claim is verified against the code
 ---

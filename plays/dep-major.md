@@ -1,6 +1,7 @@
 ---
 name: dep-major
 level: decide
+description: Lists the breaking changes in a dependency's next major version and the code each one affects.
 finder: outdated major
 on-request: true
 done: breaking changes listed, each with the call sites it affects

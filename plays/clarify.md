@@ -1,6 +1,7 @@
 ---
 name: clarify
 level: skim
+description: Makes one file faster to understand through clearer names, split functions and better comments, without changing behavior.
 finder: rotation
 done: checks pass; behavior is unchanged
 ---

@@ -13,6 +13,7 @@ workwork                         # candidates in this repo, grouped by play
 workwork --play simplify         # one play, every candidate (also runs on-request plays like performance)
 workwork --all                   # a summary for every repo of yours under $SRC, or under this directory
 workwork --all --json            # the same candidates as a JSON array, for scripts
+workwork plays [--json]          # every play with its level and what it does
 workwork prompt <id>             # a self-contained prompt for one candidate, for any agent
 workwork decide <id> reject "the theme kit already does this"
 workwork history [--rejected] [--play <name>]
@@ -22,7 +23,7 @@ workwork finds, ranks and remembers; it doesn't run agents (yet). Hand `workwork
 
 Needs node 22+ and git. `gh` (logged in, or `GH_TOKEN` set) is needed for `--all` and for reading PR and issue outcomes; without it the stored decisions still count. pnpm, knip and kit are used when a repo uses them.
 
-`--json` (with or without `--all`) prints the candidates the listing would show as an array of `{repo, label, id, play, level, kind, title}`, cheapest attention first, with `repo` as an absolute path. A finder that fails is reported on stderr, never in the array.
+`--json` (with or without `--all`) prints the candidates the listing would show as an array of `{repo, label, id, play, level, kind, title}`, cheapest attention first, with `repo` as an absolute path. A finder that fails is reported on stderr, never in the array. `plays --json` prints every play, your own included, as `{name, level, description, onRequest}`.
 
 `kind` says what a candidate rests on. `finding`: a tool reported this exact thing (an outdated package, an unused export, a TODO line). `rotation`: one file in turn, with nothing known to be wrong in it. `scan`: the whole repo, for an agent to search. A rotation or a scan says where to look, not that anyone has looked; most of a big repo's candidates are rotations.
 
@@ -38,12 +39,13 @@ A play's level can be raised, never lowered. auto needs a mechanical check that 
 
 ## Plays
 
-A play is one markdown file: frontmatter plus the prompt.
+A play is one markdown file: frontmatter plus the prompt. `description` is one sentence on what the play does, for whoever picks what to run.
 
 ```markdown
 ---
 name: implicit-state-machines
 level: decide
+description: Makes implicit state machines explicit, naming their states and transitions.
 finder: scan
 done: checks pass; each refactor names the states and transitions it made explicit
 ---

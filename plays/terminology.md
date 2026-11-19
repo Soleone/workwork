@@ -1,6 +1,7 @@
 ---
 name: terminology
 level: skim
+description: Picks one name for a concept that is called several things across code, UI and docs.
 finder: scan
 done: one concept has one name across code, UI and docs
 ---

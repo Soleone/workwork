@@ -9,6 +9,8 @@ export type Level = (typeof LEVELS)[number];
 export type Play = {
   name: string;
   level: Level;
+  /** One sentence on what the play does, for people choosing what to run. */
+  description: string;
   /** Finder name, optionally followed by an argument: "outdated patch". */
   finder: string;
   done: string;
@@ -53,11 +55,14 @@ function parsePlay(file: string): Play {
   if (!LEVELS.includes(level))
     throw new Error(`${file}: level must be one of ${LEVELS.join(", ")}`);
   const name = fields.get("name");
+  const description = fields.get("description");
   const done = fields.get("done");
-  if (!name || !done) throw new Error(`${file}: name and done are required`);
+  if (!name || !description || !done)
+    throw new Error(`${file}: name, description and done are required`);
   return {
     name,
     level,
+    description,
     finder: fields.get("finder") || "scan",
     done,
     onRequest: fields.get("on-request") === "true",

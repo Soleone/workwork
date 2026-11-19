@@ -1,6 +1,7 @@
 ---
 name: ui-states
 level: decide
+description: Lists screens missing an empty, loading or error state, adding the obvious ones.
 finder: scan
 done: each missing state is listed with where it shows
 on-request: true

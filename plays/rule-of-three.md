@@ -1,6 +1,7 @@
 ---
 name: rule-of-three
 level: skim
+description: Extracts code or test setup repeated three or more times into one shared place.
 finder: scan
 done: the three real call sites are named in the PR
 ---

@@ -1,6 +1,7 @@
 ---
 name: bug-sweep
 level: skim
+description: Hunts for real correctness and security bugs and fixes each one with a test that failed before.
 finder: scan
 done: each fix comes with a test that failed before it
 ---

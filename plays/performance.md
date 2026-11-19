@@ -1,6 +1,7 @@
 ---
 name: performance
 level: skim
+description: Speeds up the slowest path a user notices, with numbers measured before and after.
 finder: scan
 done: before and after numbers are in the PR body
 on-request: true

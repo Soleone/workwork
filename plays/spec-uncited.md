@@ -1,6 +1,7 @@
 ---
 name: spec-uncited
 level: skim
+description: Writes a behavior test for a spec rule that no test covers yet.
 finder: spec-uncited
 done: a test whose title starts with the rule's slug passes
 ---

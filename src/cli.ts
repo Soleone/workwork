@@ -5,6 +5,7 @@ import { join, relative } from "node:path";
 import { parseArgs } from "node:util";
 import { listed, listing, onRequestNote, type Listed } from "./list.ts";
 import { syncHistory } from "./outcomes.ts";
+import { loadPlays } from "./plays.ts";
 import { prompt } from "./prompt.ts";
 import { ownedRepos, repoRoot } from "./repo.ts";
 import { git, onPath } from "./run.ts";
@@ -17,6 +18,7 @@ const USAGE = `workwork: find agent work, sorted by how much human attention it 
                                              (or under this directory when SRC isn't set)
   workwork [--all] --json                    the shown candidates as a JSON array, for scripts;
                                              failed finders go to stderr
+  workwork plays [--json]                    every play with its level and what it does
   workwork prompt <id>                       a self-contained prompt for one candidate
   workwork decide <id> <verdict> ["reason"]  accept, reject or defer, in the user's words;
                                              keep when an agent looked and nothing should change
@@ -44,6 +46,7 @@ async function main(): Promise<void> {
   const options = { play: values.play, allHistory: values["all-history"] };
   if (command === undefined && values.json) return json(values.all ?? false, options);
   if (command === undefined) return list(values.all ?? false, options);
+  if (command === "plays") return plays(values.json ?? false);
   if (command === "prompt")
     return console.log(await prompt(repoRoot("."), required(args[0], "an id")));
   if (command === "decide") return decide(args);
@@ -90,6 +93,21 @@ async function json(all: boolean, options: { play?: string; allHistory?: boolean
     for (const error of found.errors) console.error(`workwork: ${error}`);
   }
   console.log(JSON.stringify(candidates, null, 2));
+}
+
+function plays(json: boolean): void {
+  const shown = loadPlays().map(({ name, level, description, onRequest }) => ({
+    name,
+    level,
+    description,
+    onRequest,
+  }));
+  if (json) return console.log(JSON.stringify(shown, null, 2));
+  const width = Math.max(...shown.map(({ name }) => name.length));
+  for (const play of shown)
+    console.log(
+      `${play.name.padEnd(width)}  ${play.level.padEnd(6)}  ${play.description}${play.onRequest ? " (on request)" : ""}`,
+    );
 }
 
 function decide([id, verdict, ...words]: string[]): void {

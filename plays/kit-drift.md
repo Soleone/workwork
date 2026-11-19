@@ -1,6 +1,7 @@
 ---
 name: kit-drift
 level: auto
+description: Restores a vendored UI component that drifted from its upstream registry version.
 finder: kit-drift
 done: `kit check` passes
 ---
