@@ -33,7 +33,9 @@ function outdatedPackages(repo: string) {
 
 async function readOutdated(repo: string) {
   if (!existsSync(join(repo, "pnpm-lock.yaml")) || !onPath("pnpm")) return [];
-  const { stdout } = await run("pnpm", ["outdated", "--format", "json"], repo);
+  const { code, stdout, stderr } = await run("pnpm", ["outdated", "--format", "json"], repo);
+  if (code !== 0 && !/^\{/m.test(stdout))
+    throw new Error(lastLine(stderr || stdout) || `pnpm outdated exited with ${code}`);
   return parseOutdated(stdout);
 }
 
