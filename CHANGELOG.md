@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.1.2](https://github.com/Soleone/workwork/compare/v0.1.1...v0.1.2) (2026-11-19)
+
+### Features
+
+* --json marks each candidate as a finding, a rotation or a scan ([4ed2b10](https://github.com/Soleone/workwork/commit/4ed2b10b80351e01a77195168aad932b20a89b27))
+* plays say what they do, and `workwork plays` lists them ([7b25da9](https://github.com/Soleone/workwork/commit/7b25da97dd4c5e93766337a314d0c5add0b35fbd))
+
+### Bug Fixes
+
+* knip finder reads its report after pnpm's install output ([f46613b](https://github.com/Soleone/workwork/commit/f46613b34ea13c6f14e7641fe81192abb315f3ad))
+
 ## [0.1.1](https://github.com/Soleone/workwork/compare/v0.1.0...v0.1.1) (2026-11-16)
 
 ### Features
