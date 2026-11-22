@@ -1,6 +1,6 @@
 ---
 name: architecture
-level: decide
+attention: decide
 description: Opens an issue about the one or two structural problems that cost the most, with the smallest fix.
 finder: scan
 done: the issue states the problem, the cost of leaving it and the smallest fix

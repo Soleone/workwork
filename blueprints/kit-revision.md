@@ -1,6 +1,6 @@
 ---
 name: kit-revision
-level: skim
+attention: skim
 description: Applies one revision of the kit's upgrade steps to bring the project closer to current.
 finder: kit-status
 done: `vp check` and `kit check` pass

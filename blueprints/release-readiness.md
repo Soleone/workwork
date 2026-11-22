@@ -1,6 +1,6 @@
 ---
 name: release-readiness
-level: skim
+attention: skim
 description: Checks that the project could ship today and fixes what would block a release.
 finder: scan
 done: a publish dry run passes; nothing destructive was run

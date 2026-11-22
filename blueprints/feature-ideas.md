@@ -1,6 +1,6 @@
 ---
 name: feature-ideas
-level: decide
+attention: decide
 description: Opens an issue for the missing feature that costs users the most, scoped to its smallest version.
 finder: scan
 done: the issue states the problem, the user and the smallest version

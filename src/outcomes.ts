@@ -133,7 +133,6 @@ function outcome(id: string, { reason, date, ...rest }: Outcome): Decision {
   const slash = id.indexOf("/");
   return {
     id,
-    play: id.slice(0, slash),
     path: id.slice(slash + 1),
     ...rest,
     reason: reason.trim(),

@@ -12,7 +12,6 @@ export type Verdict = (typeof VERDICTS)[number];
 
 export type Decision = {
   id: string;
-  play: string;
   path: string;
   commit: string;
   decision: Verdict;

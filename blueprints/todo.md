@@ -1,6 +1,6 @@
 ---
 name: todo
-level: decide
+attention: decide
 description: Does an unchecked TODO.md item if it's small and clear, or states its open question.
 finder: todo
 done: the item is done and checked off, or its open question is stated

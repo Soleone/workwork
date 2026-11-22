@@ -1,6 +1,6 @@
 ---
 name: error-messages
-level: skim
+attention: skim
 description: Rewrites error messages so they say what happened, why, and what to do next.
 finder: scan
 done: messages changed, behavior unchanged

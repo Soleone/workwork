@@ -1,8 +1,8 @@
 ---
 name: test-trim
-level: skim
+attention: skim
 description: Removes tests from a batch of test files that pin implementation details or repeat coverage found elsewhere.
-finder: rotation tests
+finder: batch tests
 done: the suite still passes; each removed test names what still covers its behavior
 ---
 

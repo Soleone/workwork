@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
-  effectiveLevel,
+  effectiveAttention,
   findCandidates,
   hasFinder,
   kindOf,
@@ -9,25 +9,25 @@ import {
   type Kind,
 } from "./candidates.ts";
 import { syncHistory } from "./outcomes.ts";
-import { LEVELS, loadPlays, type Level, type Play } from "./plays.ts";
+import { ATTENTION, loadBlueprints, type Attention, type Blueprint } from "./blueprints.ts";
 import { repoChecks } from "./repo.ts";
 import { gitQuery } from "./run.ts";
 import { latestDecisions, type Decision, type Verdict } from "./store.ts";
 
 const SHOWN_PER_PLAY = 5;
 
-export type ListOptions = { play?: string; allHistory?: boolean; compact?: boolean };
+export type ListOptions = { blueprint?: string; allHistory?: boolean; compact?: boolean };
 
 type Row = { id: string; title: string; text: string; note?: string; changed?: boolean };
-type Group = { play: Play; level: Level; rows: Row[]; error?: string };
+type Group = { blueprint: Blueprint; attention: Attention; rows: Row[]; error?: string };
 
 /** A shown candidate, for --json. `repo` is absolute so a script can run `workwork prompt` there. */
 export type Listed = {
   repo: string;
   label: string;
   id: string;
-  play: string;
-  level: Level;
+  blueprint: string;
+  attention: Attention;
   kind: Kind;
   title: string;
 };
@@ -39,72 +39,72 @@ export async function listed(
   options: ListOptions,
 ): Promise<{ candidates: Listed[]; errors: string[] }> {
   const { groups } = await grouped(repo, options);
-  const candidates = LEVELS.flatMap((level) =>
+  const candidates = ATTENTION.flatMap((attention) =>
     groups
-      .filter((group) => group.level === level)
-      .flatMap(({ play, rows }) =>
+      .filter((group) => group.attention === attention)
+      .flatMap(({ blueprint, rows }) =>
         rows.map(({ id, title }) => ({
           repo,
           label,
           id,
-          play: play.name,
-          level,
-          kind: kindOf(play),
+          blueprint: blueprint.name,
+          attention,
+          kind: kindOf(blueprint),
           title,
         })),
       ),
   );
-  const errors = groups.flatMap(({ play, error }) =>
-    error ? [`${label} ${play.name}: finder failed: ${error}`] : [],
+  const errors = groups.flatMap(({ blueprint, error }) =>
+    error ? [`${label} ${blueprint.name}: finder failed: ${error}`] : [],
   );
   return { candidates, errors };
 }
 
-/** One repo's candidates, grouped by play, cheapest attention first. Compact is one line per level, for --all. */
+/** One repo's candidates, grouped by blueprint, cheapest attention first. Compact is one line per attention, for --all. */
 export async function listing(
   repo: string,
   label: string,
   options: ListOptions,
 ): Promise<{ text: string; count: number; failed: number }> {
-  const { plays, groups, hidden, checks } = await grouped(repo, options);
+  const { blueprints, groups, hidden, checks } = await grouped(repo, options);
   const count = groups.reduce((sum, group) => sum + group.rows.length, 0);
-  const levels = LEVELS.flatMap((level) => {
+  const counts = ATTENTION.flatMap((attention) => {
     const n = groups
-      .filter((group) => group.level === level)
+      .filter((group) => group.attention === attention)
       .reduce((sum, group) => sum + group.rows.length, 0);
-    return n ? [`${n} ${level}`] : [];
+    return n ? [`${n} ${attention}`] : [];
   });
   const header = count
-    ? `${label}: ${count} candidate${count === 1 ? "" : "s"} (${levels.join(", ")}) · checks: ${checks.join(", ") || "none, so nothing is auto"}`
+    ? `${label}: ${count} candidate${count === 1 ? "" : "s"} (${counts.join(", ")}) · checks: ${checks.join(", ") || "none, so everything gets at least a skim"}`
     : `${label}: nothing to do`;
   const failed = groups.filter((group) => group.error).length;
   if (options.compact) return { text: [header, ...compactLines(groups)].join("\n"), count, failed };
 
-  const unrun = plays
-    .filter((play) => !hasFinder(play))
-    .map((play) => `${play.name} (${play.finder})`);
+  const unrun = blueprints
+    .filter((blueprint) => !hasFinder(blueprint))
+    .map((blueprint) => `${blueprint.name} (${blueprint.finder})`);
   const footer = [
     hidden ? `${hidden} hidden by past decisions or open PRs (--all-history shows them).` : "",
     unrun.length ? `Not run, no such finder: ${unrun.join(", ")}.` : "",
-    options.play ? "" : onRequestNote(),
+    options.blueprint ? "" : onRequestNote(),
   ].filter(Boolean);
-  const blocks = LEVELS.flatMap((level) => {
-    const atLevel = groups.filter((group) => group.level === level);
-    const scans = atLevel.filter((group) => group.play.finder === "scan" && !group.error);
+  const blocks = ATTENTION.flatMap((attention) => {
+    const atAttention = groups.filter((group) => group.attention === attention);
+    const scans = atAttention.filter((group) => group.blueprint.finder === "scan" && !group.error);
     return [
-      ...atLevel
+      ...atAttention
         .filter((group) => !scans.includes(group))
-        .flatMap((group) => fullBlock(group, options.play !== undefined)),
-      ...scanBlock(level, scans),
+        .flatMap((group) => fullBlock(group, options.blueprint !== undefined)),
+      ...scanBlock(attention, scans),
     ];
   });
   return { text: [header, ...blocks, ...footer].join("\n\n"), count, failed };
 }
 
 async function grouped(repo: string, options: ListOptions) {
-  const plays = selectPlays(options.play);
+  const blueprints = selectBlueprints(options.blueprint);
   const [results, history] = await Promise.all([
-    findCandidates(repo, plays.filter(hasFinder)),
+    findCandidates(repo, blueprints.filter(hasFinder)),
     syncHistory(repo),
   ]);
   const latest = latestDecisions(history.decisions);
@@ -112,7 +112,7 @@ async function grouped(repo: string, options: ListOptions) {
   const churn = churnByFile(repo);
   let hidden = 0;
 
-  const groups: Group[] = results.map(({ play, candidates, error }) => {
+  const groups: Group[] = results.map(({ blueprint, candidates, error }) => {
     const rows = candidates.flatMap((candidate) => {
       const past = pastNote(repo, candidate, latest.get(candidate.id), history.inProgress);
       if (past.hidden && !options.allHistory) {
@@ -132,37 +132,37 @@ async function grouped(repo: string, options: ListOptions) {
     });
     // Changed since its last verdict comes first, then the finder's own order.
     rows.sort((a, b) => Number(b.changed ?? false) - Number(a.changed ?? false));
-    return { play, level: effectiveLevel(play, checks), rows, error };
+    return { blueprint, attention: effectiveAttention(blueprint, checks), rows, error };
   });
-  return { plays, groups, hidden, checks };
+  return { blueprints, groups, hidden, checks };
 }
 
-function fullBlock({ play, level, rows, error }: Group, showAll: boolean): string[] {
-  if (error) return [`${level.padEnd(6)} ${play.name}: finder failed: ${error}`];
+function fullBlock({ blueprint, attention, rows, error }: Group, showAll: boolean): string[] {
+  if (error) return [`${attention.padEnd(6)} ${blueprint.name}: finder failed: ${error}`];
   if (rows.length === 0) return [];
   const shown = showAll ? rows : rows.slice(0, SHOWN_PER_PLAY);
   const width = Math.min(48, Math.max(...shown.map(({ id }) => id.length)));
   return [
     [
-      `${level.padEnd(6)} ${play.name} (${rows.length}) · done: ${play.done}`,
+      `${attention.padEnd(6)} ${blueprint.name} (${rows.length}) · done: ${blueprint.done}`,
       ...shown.map(({ id, text }) => `  ${id.padEnd(width)}  ${text}`),
       ...(rows.length > shown.length
-        ? [`  … ${rows.length - shown.length} more: workwork --play ${play.name}`]
+        ? [`  … ${rows.length - shown.length} more: workwork --blueprint ${blueprint.name}`]
         : []),
     ].join("\n"),
   ];
 }
 
 /** Scans have one candidate each, the whole repo, so they share a block. */
-function scanBlock(level: Level, scans: Group[]): string[] {
+function scanBlock(attention: Attention, scans: Group[]): string[] {
   const rows = scans.flatMap((group) =>
-    group.rows.map((row) => ({ ...row, done: group.play.done })),
+    group.rows.map((row) => ({ ...row, done: group.blueprint.done })),
   );
   if (rows.length === 0) return [];
   const width = Math.max(...rows.map(({ id }) => id.length));
   return [
     [
-      `${level.padEnd(6)} scans (${rows.length}) · each searches the whole repo · done:`,
+      `${attention.padEnd(6)} scans (${rows.length}) · each searches the whole repo · done:`,
       ...rows.map(
         ({ id, done, note }) =>
           `  ${id.padEnd(width)}  ${[done, note].filter(Boolean).join(" · ")}`,
@@ -172,40 +172,44 @@ function scanBlock(level: Level, scans: Group[]): string[] {
 }
 
 function compactLines(groups: Group[]): string[] {
-  const lines = LEVELS.flatMap((level) => {
-    const atLevel = groups.filter((group) => group.level === level && group.rows.length);
-    const scans = atLevel.filter((group) => group.play.finder === "scan").length;
-    const plays = [
-      ...atLevel
-        .filter((group) => group.play.finder !== "scan")
-        .map((group) => `${group.play.name} ${group.rows.length}`),
+  const lines = ATTENTION.flatMap((attention) => {
+    const atAttention = groups.filter(
+      (group) => group.attention === attention && group.rows.length,
+    );
+    const scans = atAttention.filter((group) => group.blueprint.finder === "scan").length;
+    const blueprints = [
+      ...atAttention
+        .filter((group) => group.blueprint.finder !== "scan")
+        .map((group) => `${group.blueprint.name} ${group.rows.length}`),
       ...(scans ? [`${scans} scan${scans === 1 ? "" : "s"}`] : []),
     ];
-    return plays.length ? [`  ${level.padEnd(6)} ${plays.join(" · ")}`] : [];
+    return blueprints.length ? [`  ${attention.padEnd(6)} ${blueprints.join(" · ")}`] : [];
   });
   const failures = groups.filter((group) => group.error);
   if (failures.length)
     lines.push(
-      `  failed ${failures.map((group) => `${group.play.name} (${group.error})`).join(" · ")}`,
+      `  failed ${failures.map((group) => `${group.blueprint.name} (${group.error})`).join(" · ")}`,
     );
   return lines;
 }
 
-/** Plays kept out of the default listing, so they can still be found. */
+/** Blueprints kept out of the default listing, so they can still be found. */
 export function onRequestNote(): string {
-  const names = loadPlays()
-    .filter((play) => play.onRequest)
-    .map((play) => play.name);
-  return names.length ? `On request: ${names.join(", ")} (workwork --play <name>).` : "";
+  const names = loadBlueprints()
+    .filter((blueprint) => blueprint.onRequest)
+    .map((blueprint) => blueprint.name);
+  return names.length ? `On request: ${names.join(", ")} (workwork --blueprint <name>).` : "";
 }
 
-function selectPlays(name: string | undefined): Play[] {
-  const plays = loadPlays();
-  if (!name) return plays.filter((play) => !play.onRequest);
-  const play = plays.find((candidate) => candidate.name === name);
-  if (!play)
-    throw new Error(`no play named ${name}. Plays: ${plays.map((each) => each.name).join(", ")}`);
-  return [play];
+function selectBlueprints(name: string | undefined): Blueprint[] {
+  const blueprints = loadBlueprints();
+  if (!name) return blueprints.filter((blueprint) => !blueprint.onRequest);
+  const blueprint = blueprints.find((candidate) => candidate.name === name);
+  if (!blueprint)
+    throw new Error(
+      `no blueprint named ${name}. Blueprints: ${blueprints.map((each) => each.name).join(", ")}`,
+    );
+  return [blueprint];
 }
 
 const PAST: Record<Verdict, string> = {

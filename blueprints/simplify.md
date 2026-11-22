@@ -1,8 +1,8 @@
 ---
 name: simplify
-level: skim
+attention: skim
 description: Cuts dead paths, one-use layers and needless checks from a batch of related files, without changing behavior.
-finder: rotation
+finder: batch
 done: checks pass; behavior is unchanged
 ---
 

@@ -3,6 +3,7 @@ import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync 
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import { beforeAll, describe, expect, test } from "vite-plus/test";
+import { deleteBlueprint, loadBlueprints, saveBlueprint } from "../src/blueprints.ts";
 import { finders, parseKitCheck, parseKnip, parseOutdated } from "../src/finders.ts";
 import { listed, listing } from "../src/list.ts";
 import { prompt } from "../src/prompt.ts";
@@ -11,7 +12,7 @@ import { readDecisions, recordDecisions, type Decision } from "../src/store.ts";
 const scratch = mkdtempSync(join(tmpdir(), "workwork-test-"));
 
 beforeAll(() => {
-  // Isolate git from the user's config (hooks, signing) and workwork from the user's plays.
+  // Isolate git from the user's config (hooks, signing) and workwork from the user's blueprints.
   const gitconfig = join(scratch, "gitconfig");
   writeFileSync(
     gitconfig,
@@ -44,10 +45,9 @@ function commitFiles(dir: string, files: Record<string, string>): void {
 
 function decision(repo: string, id: string, verdict: Decision["decision"], reason = ""): Decision {
   const commit = sh(repo, "rev-parse", "HEAD").trim();
-  const [play, path] = id.split("/");
+  const path = id.split("/")[1];
   return {
     id,
-    play,
     path,
     commit,
     decision: verdict,
@@ -113,64 +113,87 @@ describe("decisions", () => {
       repo,
       label: "repo",
       id: "todo/ship-it",
-      play: "todo",
-      level: "decide",
+      blueprint: "todo",
+      attention: "decide",
       kind: "finding",
       title: "Ship it",
     });
     expect(candidates.map(({ id }) => id)).not.toContain("todo/add-dark-mode");
     // Only the TODO line is something a tool found; the rest only say where an agent could look.
     const kind = (id: string) => candidates.find((candidate) => candidate.id === id)?.kind;
-    expect(kind("clarify/src/a.ts")).toBe("rotation");
+    expect(kind("clarify/src/a.ts")).toBe("batch");
     expect(kind("bug-sweep/.")).toBe("scan");
-    const levels = candidates.map(({ level }) => level);
-    expect(levels).toContain("skim");
-    expect(levels.indexOf("decide")).toBeGreaterThan(levels.lastIndexOf("skim"));
+    const attention = candidates.map(({ attention }) => attention);
+    expect(attention).toContain("skim");
+    expect(attention.indexOf("decide")).toBeGreaterThan(attention.lastIndexOf("skim"));
   });
 
   test("a deferral hides a candidate until its file changes", async () => {
     const repo = repoWith({ "TODO.md": "- [ ] Add dark mode\n" });
     recordDecisions(repo, [decision(repo, "todo/add-dark-mode", "defer", "after the release")]);
-    expect((await listing(repo, "repo", { play: "todo" })).count).toBe(0);
+    expect((await listing(repo, "repo", { blueprint: "todo" })).count).toBe(0);
 
     commitFiles(repo, { "TODO.md": "- [ ] Add dark mode\n- [ ] Ship it\n" });
-    const { text } = await listing(repo, "repo", { play: "todo" });
+    const { text } = await listing(repo, "repo", { blueprint: "todo" });
     expect(text).toContain("todo/add-dark-mode");
     expect(text).toContain("changed since");
   });
   test("a kept scan stays hidden until anything in the repo changes", async () => {
     const repo = repoWith({ "src/a.ts": "export const a = 1;\n" });
     recordDecisions(repo, [decision(repo, "docs-drift/.", "keep", "nothing found")]);
-    expect((await listing(repo, "repo", { play: "docs-drift" })).count).toBe(0);
+    expect((await listing(repo, "repo", { blueprint: "docs-drift" })).count).toBe(0);
 
     commitFiles(repo, { "src/b.ts": "export const b = 2;\n" });
-    const { text } = await listing(repo, "repo", { play: "docs-drift" });
+    const { text } = await listing(repo, "repo", { blueprint: "docs-drift" });
     expect(text).toContain("docs-drift/.");
     expect(text).toContain("kept 20");
   });
 });
 
-describe("plays", () => {
-  test("a legacy custom play without a description does not block candidate prompts", async () => {
+describe("blueprints", () => {
+  test("a play from before blueprints, in the old folder and without a description, still works", async () => {
     const repo = repoWith({ "src/a.ts": "export const a = 1;\n" });
     const dir = join(scratch, "data", "apps", "workwork", "plays");
     mkdirSync(dir, { recursive: true });
     const file = join(dir, "clarify.md");
     writeFileSync(
       file,
-      "---\nname: clarify\nlevel: skim\nfinder: rotation\ndone: easier to follow\n---\n\nClarify the code.\n",
+      "---\nname: clarify\nlevel: auto\nfinder: rotation\ndone: easier to follow\n---\n\nClarify the code.\n",
     );
     try {
+      const clarify = loadBlueprints().find(({ name }) => name === "clarify");
+      expect(clarify).toMatchObject({ attention: "none", finder: "batch", custom: true });
       await expect(prompt(repo, "bug-sweep/.")).resolves.toContain("# workwork: bug-sweep/.");
       await expect(prompt(repo, "clarify/src/a.ts")).resolves.toContain("Clarify the code.");
     } finally {
       rmSync(file);
     }
   });
+
+  test("a saved blueprint lists as the user's own until it is deleted", () => {
+    const saved = {
+      name: "naming",
+      attention: "skim" as const,
+      description: "Fixes misleading names.",
+      finder: "batch",
+      done: "names say what things are",
+      onRequest: true,
+      prompt: "Rename what misleads.",
+    };
+    saveBlueprint(saved);
+    expect(loadBlueprints().find(({ name }) => name === "naming")).toEqual({
+      ...saved,
+      custom: true,
+    });
+    expect(() => saveBlueprint({ ...saved, name: "Bad Name" })).toThrow("lowercase");
+    expect(() => saveBlueprint({ ...saved, attention: "auto" as never })).toThrow("attention");
+    deleteBlueprint("naming");
+    expect(loadBlueprints().some(({ name }) => name === "naming")).toBe(false);
+  });
 });
 
 describe("finders", () => {
-  test("rotation: batches start with the largest file, tests apart, vendored files skipped", async () => {
+  test("batch: batches start with the largest file, tests apart, vendored files skipped", async () => {
     const repo = repoWith({
       ".gitattributes": "src/ui/** linguist-vendored\n",
       "src/small.ts": "a\n",
@@ -179,15 +202,15 @@ describe("finders", () => {
       "src/large.test.ts": "test\n",
       "README.md": "docs\n",
     });
-    const { candidates } = await listed(repo, "repo", { play: "simplify" });
+    const { candidates } = await listed(repo, "repo", { blueprint: "simplify" });
     expect(candidates.map(({ id, title }) => `${id} ${title}`)).toEqual([
       "simplify/src/large.ts with small.ts",
     ]);
-    const tests = await listed(repo, "repo", { play: "test-trim" });
+    const tests = await listed(repo, "repo", { blueprint: "test-trim" });
     expect(tests.candidates.map(({ id }) => id)).toEqual(["test-trim/src/large.test.ts"]);
   });
 
-  test("rotation: files that import each other share a batch across folders, up to 2000 lines", async () => {
+  test("batch: files that import each other share a batch across folders, up to 2000 lines", async () => {
     const lines = (n: number) => "x\n".repeat(n);
     const repo = repoWith({
       "src/app.ts": `import { db } from "../lib/db.js";\n${lines(900)}`,
@@ -195,7 +218,7 @@ describe("finders", () => {
       "src/other.ts": lines(700),
       "src/big.ts": `import "./app";\n${lines(2100)}`,
     });
-    const { candidates } = await listed(repo, "repo", { play: "simplify" });
+    const { candidates } = await listed(repo, "repo", { blueprint: "simplify" });
     expect(candidates.map(({ id, title }) => `${id} ${title}`)).toEqual([
       "simplify/src/big.ts ",
       "simplify/src/app.ts with db.ts",
@@ -209,15 +232,15 @@ describe("finders", () => {
       "src/b.ts": "b\n",
     });
     recordDecisions(repo, [decision(repo, "clarify/src/a.ts", "keep", "clear enough")]);
-    expect((await listing(repo, "repo", { play: "clarify" })).count).toBe(0);
+    expect((await listing(repo, "repo", { blueprint: "clarify" })).count).toBe(0);
 
     commitFiles(repo, { "src/b.ts": "b\nc\n" });
-    expect((await listing(repo, "repo", { play: "clarify" })).text).toContain("changed since");
+    expect((await listing(repo, "repo", { blueprint: "clarify" })).text).toContain("changed since");
   });
 
   test("file-size: code files over 500 lines", async () => {
     const repo = repoWith({ "src/long.ts": "x\n".repeat(501), "src/fine.ts": "x\n".repeat(500) });
-    const { candidates } = await listed(repo, "repo", { play: "file-size" });
+    const { candidates } = await listed(repo, "repo", { blueprint: "file-size" });
     expect(candidates).toMatchObject([
       { id: "file-size/src/long.ts", kind: "finding", title: "over 500 lines" },
     ]);
@@ -229,7 +252,7 @@ describe("finders", () => {
         "| Rule | When | Then |\n| --- | --- | --- |\n| `capture.open` | C | Editor opens |\n| `capture.save` | Enter | Task saved |\n",
       "src/capture.test.ts": 'test("capture.open: C opens the editor", () => {});\n',
     });
-    const { text } = await listing(repo, "repo", { play: "spec-uncited" });
+    const { text } = await listing(repo, "repo", { blueprint: "spec-uncited" });
     expect(text).toContain("spec-uncited/capture.save");
     expect(text).not.toContain("spec-uncited/capture.open");
   });

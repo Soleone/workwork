@@ -1,6 +1,6 @@
 ---
 name: accessibility
-level: skim
+attention: skim
 description: Fixes keyboard, focus, label and color-only problems so the app works with a keyboard and a screen reader.
 finder: scan
 done: checks pass; what changed for a keyboard user is stated

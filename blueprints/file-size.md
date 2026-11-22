@@ -1,6 +1,6 @@
 ---
 name: file-size
-level: skim
+attention: skim
 description: Splits a code file over 500 lines along its seams, so it can be read and changed as smaller pieces.
 finder: size 500
 done: checks pass; behavior is unchanged; no new file is over 500 lines

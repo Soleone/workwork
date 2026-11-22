@@ -5,7 +5,8 @@ import { join, relative } from "node:path";
 import { parseArgs } from "node:util";
 import { listed, listing, onRequestNote, type Listed } from "./list.ts";
 import { syncHistory } from "./outcomes.ts";
-import { loadPlays } from "./plays.ts";
+import { deleteBlueprint, loadBlueprints, saveBlueprint } from "./blueprints.ts";
+import { hasFinder } from "./candidates.ts";
 import { prompt } from "./prompt.ts";
 import { ownedRepos, repoRoot } from "./repo.ts";
 import { git, onPath } from "./run.ts";
@@ -13,18 +14,20 @@ import { recordDecisions, VERDICTS, type Verdict } from "./store.ts";
 
 const USAGE = `workwork: find agent work, sorted by how much human attention it needs
 
-  workwork [--play <name>] [--all-history]   candidates in this repo
-  workwork --all                             a summary for every repo of yours under $SRC
-                                             (or under this directory when SRC isn't set)
-  workwork [--all] --json                    the shown candidates as a JSON array, for scripts;
-                                             failed finders go to stderr
-  workwork plays [--json]                    every play with its level and what it does
-  workwork prompt <id>                       a self-contained prompt for one candidate
-  workwork decide <id> <verdict> ["reason"]  accept, reject or defer, in the user's words;
-                                             keep when an agent looked and nothing should change
-  workwork history [--rejected] [--play <name>]
+  workwork [--blueprint <name>] [--all-history]  candidates in this repo
+  workwork --all                            a summary for every repo of yours under $SRC
+                                            (or under this directory when SRC isn't set)
+  workwork [--all] --json                   the shown candidates as a JSON array, for scripts;
+                                            failed finders go to stderr
+  workwork blueprints [--json]              every blueprint with its attention and what it does
+  workwork blueprints save                  save one of yours, as JSON on stdin
+  workwork blueprints delete <name>         delete one of yours
+  workwork prompt <id>                      a self-contained prompt for one candidate
+  workwork decide <id> <verdict> ["reason"] accept, reject or defer, in the user's words;
+                                            keep when an agent looked and nothing should change
+  workwork history [--rejected] [--blueprint <name>]
 
-Levels: auto (a check defines correct; a digest is enough), skim (same behavior, small diff;
+Attention: none (a check defines correct; a digest is enough), skim (same behavior, small diff;
 skim and accept), decide (changes behavior or needs product judgment).`;
 
 async function main(): Promise<void> {
@@ -33,7 +36,7 @@ async function main(): Promise<void> {
     options: {
       all: { type: "boolean" },
       json: { type: "boolean" },
-      play: { type: "string" },
+      blueprint: { type: "string" },
       "all-history": { type: "boolean" },
       rejected: { type: "boolean" },
       help: { type: "boolean", short: "h" },
@@ -43,21 +46,24 @@ async function main(): Promise<void> {
   const [command, ...args] = positionals;
   if (values.help) return console.log(USAGE);
   if (values.version) return console.log(version());
-  const options = { play: values.play, allHistory: values["all-history"] };
+  const options = { blueprint: values.blueprint, allHistory: values["all-history"] };
   if (command === undefined && values.json) return json(values.all ?? false, options);
   if (command === undefined) return list(values.all ?? false, options);
-  if (command === "plays") return plays(values.json ?? false);
+  if (command === "blueprints") return blueprints(args, values.json ?? false);
   if (command === "prompt")
     return console.log(await prompt(repoRoot("."), required(args[0], "an id")));
   if (command === "decide") return decide(args);
-  if (command === "history") return history(values.rejected ?? false, values.play);
+  if (command === "history") return history(values.rejected ?? false, values.blueprint);
   throw new Error(`unknown command ${command}\n\n${USAGE}`);
 }
 
 // Repos are labeled relative to here.
 const SRC = process.env.SRC ?? process.cwd();
 
-async function list(all: boolean, options: { play?: string; allHistory?: boolean }): Promise<void> {
+async function list(
+  all: boolean,
+  options: { blueprint?: string; allHistory?: boolean },
+): Promise<void> {
   warnStaleEngram();
   if (!all) {
     const repo = repoRoot(".");
@@ -84,7 +90,10 @@ async function list(all: boolean, options: { play?: string; allHistory?: boolean
   );
 }
 
-async function json(all: boolean, options: { play?: string; allHistory?: boolean }): Promise<void> {
+async function json(
+  all: boolean,
+  options: { blueprint?: string; allHistory?: boolean },
+): Promise<void> {
   const repos = all ? await ownedRepos(SRC) : [repoRoot(".")];
   const candidates: Listed[] = [];
   for (const repo of repos) {
@@ -95,24 +104,33 @@ async function json(all: boolean, options: { play?: string; allHistory?: boolean
   console.log(JSON.stringify(candidates, null, 2));
 }
 
-function plays(json: boolean): void {
-  const shown = loadPlays().map(({ name, level, description, onRequest }) => ({
-    name,
-    level,
-    description,
-    onRequest,
-  }));
-  if (json) return console.log(JSON.stringify(shown, null, 2));
-  const width = Math.max(...shown.map(({ name }) => name.length));
-  for (const play of shown)
+async function blueprints([action, name]: string[], json: boolean): Promise<void> {
+  if (action === "save") {
+    const blueprint = JSON.parse(await stdin());
+    if (!hasFinder({ ...blueprint, finder: blueprint.finder || "scan" }))
+      throw new Error(`no finder named ${blueprint.finder}`);
+    return console.log(`Saved ${saveBlueprint(blueprint)}.`);
+  }
+  if (action === "delete") return deleteBlueprint(required(name, "a blueprint name"));
+  if (action !== undefined) throw new Error(`unknown blueprints action ${action}\n\n${USAGE}`);
+  const all = loadBlueprints();
+  if (json) return console.log(JSON.stringify(all, null, 2));
+  const width = Math.max(...all.map((each) => each.name.length));
+  for (const each of all)
     console.log(
-      `${play.name.padEnd(width)}  ${play.level.padEnd(6)}  ${play.description}${play.onRequest ? " (on request)" : ""}`,
+      `${each.name.padEnd(width)}  ${each.attention.padEnd(6)}  ${each.description}${each.onRequest ? " (on request)" : ""}${each.custom ? " (yours)" : ""}`,
     );
+}
+
+async function stdin(): Promise<string> {
+  let text = "";
+  for await (const chunk of process.stdin) text += chunk;
+  return text;
 }
 
 function decide([id, verdict, ...words]: string[]): void {
   const slash = required(id, "an id").indexOf("/");
-  if (slash < 1) throw new Error(`ids look like <play>/<path>, got ${id}`);
+  if (slash < 1) throw new Error(`ids look like <blueprint>/<path>, got ${id}`);
   if (!VERDICTS.includes(verdict as Verdict))
     throw new Error(`decide needs one of ${VERDICTS.join(", ")}`);
   const repo = repoRoot(".");
@@ -122,7 +140,6 @@ function decide([id, verdict, ...words]: string[]): void {
   const where = recordDecisions(repo, [
     {
       id,
-      play: id.slice(0, slash),
       path: id.slice(slash + 1),
       commit,
       decision: verdict as Verdict,
@@ -134,12 +151,13 @@ function decide([id, verdict, ...words]: string[]): void {
   console.log(`Recorded ${verdict} for ${id} in ${where}.`);
 }
 
-async function history(rejectedOnly: boolean, play: string | undefined): Promise<void> {
+async function history(rejectedOnly: boolean, blueprint: string | undefined): Promise<void> {
   const { decisions } = await syncHistory(repoRoot("."));
   const shown = decisions
     .filter(
       (decision) =>
-        (!rejectedOnly || decision.decision === "reject") && (!play || decision.play === play),
+        (!rejectedOnly || decision.decision === "reject") &&
+        (!blueprint || decision.id.startsWith(`${blueprint}/`)),
     )
     .reverse();
   if (shown.length === 0) return console.log("No decisions recorded.");

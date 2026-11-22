@@ -1,6 +1,6 @@
 ---
 name: dep-patch
-level: auto
+attention: none
 description: Upgrades a dependency to its latest patch version if the checks still pass.
 finder: outdated patch
 done: checks pass

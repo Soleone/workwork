@@ -1,8 +1,8 @@
 ---
 name: clarify
-level: skim
+attention: skim
 description: Makes a batch of related files faster to understand through clearer names, split functions and better comments, without changing behavior.
-finder: rotation
+finder: batch
 done: checks pass; behavior is unchanged
 ---
 

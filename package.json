@@ -23,7 +23,7 @@
   },
   "files": [
     "dist",
-    "plays",
+    "blueprints",
     "prompts"
   ],
   "type": "module",

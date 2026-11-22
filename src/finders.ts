@@ -15,7 +15,7 @@ export const finders: Record<string, Finder> = {
   "spec-uncited": specUncited,
   todo,
   scan: async () => [{ key: ".", title: "the whole repo" }],
-  rotation,
+  batch,
   size,
 };
 
@@ -24,7 +24,7 @@ export const finders: Record<string, Finder> = {
 type Bump = "patch" | "minor" | "major";
 type OutdatedInfo = { current?: string; latest: string; dependencyType: string };
 
-// Three plays share one `pnpm outdated` run per repo.
+// Three blueprints share one `pnpm outdated` run per repo.
 const outdatedRuns = new Map<string, Promise<(Found & { bump: Bump })[]>>();
 
 function outdatedPackages(repo: string) {
@@ -123,7 +123,7 @@ async function kitDrift(repo: string): Promise<Found[]> {
   if (!usesKit(repo)) return [];
   const { stdout, stderr } = await run("kit", ["check"], repo);
   const found = parseKitCheck(stdout);
-  // Its exit code also covers knip, which the knip play handles; only a check that never compared is a failure.
+  // Its exit code also covers knip, which the knip blueprint handles; only a check that never compared is a failure.
   if (found.length === 0 && !/OK: vendored|No vendored components/.test(stdout))
     throw new Error(lastLine(stderr || stdout));
   return found;
@@ -232,7 +232,7 @@ function todoItems(markdown: string): Found[] {
   return items;
 }
 
-// --- rotation and size
+// --- batch and size
 
 const CODE =
   /\.(c|cc|cjs|clj|cpp|cs|css|cts|ex|exs|go|h|hpp|java|js|jsx|kt|lua|mjs|mts|php|py|rb|rs|scala|scss|sh|svelte|swift|ts|tsx|vue|zig)$/;
@@ -248,7 +248,7 @@ type Sized = { file: string; lines: number };
  * its own files import or are imported by, wherever they live, then by its folder's files, so
  * related code is read together even when the folders don't say so. `tests` takes only test files.
  */
-async function rotation(repo: string, arg: string | undefined): Promise<Found[]> {
+async function batch(repo: string, arg: string | undefined): Promise<Found[]> {
   const files = codeFiles(repo).filter(({ file }) => TEST.test(file) === (arg === "tests"));
   return batches(files, importGraph(repo, files)).map(([first, ...rest]) => ({
     key: first.file,

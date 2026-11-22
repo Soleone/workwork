@@ -1,26 +1,26 @@
 import { finders, type Found } from "./finders.ts";
-import type { Level, Play } from "./plays.ts";
+import type { Attention, Blueprint } from "./blueprints.ts";
 
 export type Candidate = Found & { id: string };
-export type PlayResult = { play: Play; candidates: Candidate[]; error?: string };
+export type BlueprintResult = { blueprint: Blueprint; candidates: Candidate[]; error?: string };
 
-export function hasFinder(play: Play): boolean {
-  return finderOf(play).name in finders;
+export function hasFinder(blueprint: Blueprint): boolean {
+  return finderOf(blueprint).name in finders;
 }
 
-/** Runs each play's finder. A failing finder is reported with its play instead of failing the listing. */
-export function findCandidates(repo: string, plays: Play[]): Promise<PlayResult[]> {
+/** Runs each blueprint's finder. A failing finder is reported with its blueprint instead of failing the listing. */
+export function findCandidates(repo: string, blueprints: Blueprint[]): Promise<BlueprintResult[]> {
   return Promise.all(
-    plays.map(async (play) => {
-      const { name, arg } = finderOf(play);
+    blueprints.map(async (blueprint) => {
+      const { name, arg } = finderOf(blueprint);
       try {
         const found = await finders[name](repo, arg);
         return {
-          play,
-          candidates: found.map((item) => ({ ...item, id: `${play.name}/${item.key}` })),
+          blueprint,
+          candidates: found.map((item) => ({ ...item, id: `${blueprint.name}/${item.key}` })),
         };
       } catch (error) {
-        return { play, candidates: [], error: (error as Error).message.split("\n")[0] };
+        return { blueprint, candidates: [], error: (error as Error).message.split("\n")[0] };
       }
     }),
   );
@@ -28,22 +28,22 @@ export function findCandidates(repo: string, plays: Play[]): Promise<PlayResult[
 
 /**
  * What a candidate is based on. finding: a tool reported this exact thing (an outdated package, an
- * unused export, a TODO). rotation: a file taken in turn, with nothing known to be wrong in it.
- * scan: the whole repo, for an agent to search. Rotations and scans say where to look, not that anyone has.
+ * unused export, a TODO). batch: related files read together, with nothing known to be wrong in them.
+ * scan: the whole repo, for an agent to search. Batches and scans say where to look, not that anyone has.
  */
-export type Kind = "finding" | "rotation" | "scan";
+export type Kind = "finding" | "batch" | "scan";
 
-export function kindOf(play: Play): Kind {
-  const { name } = finderOf(play);
-  return name === "scan" || name === "rotation" ? name : "finding";
+export function kindOf(blueprint: Blueprint): Kind {
+  const { name } = finderOf(blueprint);
+  return name === "scan" || name === "batch" ? name : "finding";
 }
 
-/** auto requires a mechanical check that passed, so a repo without checks gets skim instead. */
-export function effectiveLevel(play: Play, checks: string[]): Level {
-  return play.level === "auto" && checks.length === 0 ? "skim" : play.level;
+/** none requires a mechanical check that passed, so a repo without checks gets skim instead. */
+export function effectiveAttention(blueprint: Blueprint, checks: string[]): Attention {
+  return blueprint.attention === "none" && checks.length === 0 ? "skim" : blueprint.attention;
 }
 
-function finderOf(play: Play): { name: string; arg?: string } {
-  const [name, arg] = play.finder.split(/\s+/, 2);
+function finderOf(blueprint: Blueprint): { name: string; arg?: string } {
+  const [name, arg] = blueprint.finder.split(/\s+/, 2);
   return { name, arg };
 }

@@ -1,6 +1,6 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { configDir } from "./plays.ts";
+import { configDir } from "./blueprints.ts";
 import { gitQuery, onPath, run } from "./run.ts";
 
 export function repoRoot(dir: string): string {
@@ -9,7 +9,7 @@ export function repoRoot(dir: string): string {
   return root;
 }
 
-/** The mechanical checks this repo has. Without any, nothing can be auto. */
+/** The mechanical checks this repo has. Without any, everything needs at least a skim. */
 export function repoChecks(repo: string): string[] {
   const path = join(repo, "package.json");
   const pkg = existsSync(path) ? JSON.parse(readFileSync(path, "utf8")) : {};
