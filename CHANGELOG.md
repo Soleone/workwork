@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.2.0](https://github.com/Soleone/workwork/compare/v0.1.2...v0.2.0) (2026-11-22)
+
+### Features
+
+* rotation plays work on batches of related files, and file-size flags files over 500 lines ([ca8a616](https://github.com/Soleone/workwork/commit/ca8a6165b864dfcdd30d5ee729d8dd5f76625f69))
+
+### Bug Fixes
+
+* **plays:** allow missing descriptions on custom plays ([4a105c6](https://github.com/Soleone/workwork/commit/4a105c6fc52efdac497120744dc1f73289fb2b03))
+* report pnpm outdated failures ([#1](https://github.com/Soleone/workwork/issues/1)) ([a675113](https://github.com/Soleone/workwork/commit/a675113875f778cf42663740f9e22550bf0d0281))
+
 ## [0.1.2](https://github.com/Soleone/workwork/compare/v0.1.1...v0.1.2) (2026-11-19)
 
 ### Features
