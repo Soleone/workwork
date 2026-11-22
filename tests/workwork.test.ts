@@ -165,7 +165,7 @@ describe("plays", () => {
 });
 
 describe("finders", () => {
-  test("rotation: code files largest first, tests apart, vendored files skipped", async () => {
+  test("rotation: batches start with the largest file, tests apart, vendored files skipped", async () => {
     const repo = repoWith({
       ".gitattributes": "src/ui/** linguist-vendored\n",
       "src/small.ts": "a\n",
@@ -174,14 +174,48 @@ describe("finders", () => {
       "src/large.test.ts": "test\n",
       "README.md": "docs\n",
     });
-    const simplify = await listing(repo, "repo", { play: "simplify" });
-    expect(simplify.text.indexOf("simplify/src/large.ts")).toBeLessThan(
-      simplify.text.indexOf("simplify/src/small.ts"),
-    );
-    expect(simplify.count).toBe(2);
-    const tests = await listing(repo, "repo", { play: "test-trim" });
-    expect(tests.text).toContain("test-trim/src/large.test.ts");
-    expect(tests.count).toBe(1);
+    const { candidates } = await listed(repo, "repo", { play: "simplify" });
+    expect(candidates.map(({ id, title }) => `${id} ${title}`)).toEqual([
+      "simplify/src/large.ts with small.ts",
+    ]);
+    const tests = await listed(repo, "repo", { play: "test-trim" });
+    expect(tests.candidates.map(({ id }) => id)).toEqual(["test-trim/src/large.test.ts"]);
+  });
+
+  test("rotation: files that import each other share a batch across folders, up to 2000 lines", async () => {
+    const lines = (n: number) => "x\n".repeat(n);
+    const repo = repoWith({
+      "src/app.ts": `import { db } from "../lib/db.js";\n${lines(900)}`,
+      "lib/db.ts": lines(800),
+      "src/other.ts": lines(700),
+      "src/big.ts": `import "./app";\n${lines(2100)}`,
+    });
+    const { candidates } = await listed(repo, "repo", { play: "simplify" });
+    expect(candidates.map(({ id, title }) => `${id} ${title}`)).toEqual([
+      "simplify/src/big.ts ",
+      "simplify/src/app.ts with db.ts",
+      "simplify/src/other.ts ",
+    ]);
+  });
+
+  test("a kept batch comes back when any of its files changes", async () => {
+    const repo = repoWith({
+      "src/a.ts": 'import "./b";\nexport const a = 1;\n',
+      "src/b.ts": "b\n",
+    });
+    recordDecisions(repo, [decision(repo, "clarify/src/a.ts", "keep", "clear enough")]);
+    expect((await listing(repo, "repo", { play: "clarify" })).count).toBe(0);
+
+    commitFiles(repo, { "src/b.ts": "b\nc\n" });
+    expect((await listing(repo, "repo", { play: "clarify" })).text).toContain("changed since");
+  });
+
+  test("file-size: code files over 500 lines", async () => {
+    const repo = repoWith({ "src/long.ts": "x\n".repeat(501), "src/fine.ts": "x\n".repeat(500) });
+    const { candidates } = await listed(repo, "repo", { play: "file-size" });
+    expect(candidates).toMatchObject([
+      { id: "file-size/src/long.ts", kind: "finding", title: "over 500 lines" },
+    ]);
   });
 
   test("spec rules without a citing test are candidates", async () => {

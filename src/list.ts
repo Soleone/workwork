@@ -215,7 +215,7 @@ const PAST: Record<Verdict, string> = {
   keep: "kept",
 };
 
-/** Rejections and open PRs hide a candidate; any other verdict hides it until its file changes. */
+/** Rejections and open PRs hide a candidate; any other verdict hides it until one of its files changes. */
 function pastNote(
   repo: string,
   candidate: Candidate,
@@ -227,27 +227,33 @@ function pastNote(
   const note = `${PAST[decision.decision]} ${decision.date.slice(0, 10)}${decision.reason ? `: "${clip(decision.reason, 80)}"` : ""}`;
   if (decision.decision === "reject") return { hidden: true, note };
   const changed =
-    gitQuery(repo, [
-      "diff",
-      "--quiet",
-      decision.commit,
-      "--",
-      ...(candidate.file ? [candidate.file] : []),
-    ]) === undefined;
+    gitQuery(repo, ["diff", "--quiet", decision.commit, "--", ...(candidate.files ?? [])]) ===
+    undefined;
   return changed
     ? { hidden: false, note: `${note}, changed since`, changed }
     : { hidden: true, note };
 }
 
-/** Size and churn, for candidates that are about one file (not, say, a package listed in package.json). */
+/** Size and churn, for candidates about their files (not, say, a package listed in package.json). */
 function signals(repo: string, candidate: Candidate, churn: Map<string, number>): string {
-  const { file, key } = candidate;
-  if (!file || (key !== file && !key.startsWith(`${file}#`))) return "";
-  const path = join(repo, file);
-  if (!existsSync(path)) return "file missing";
-  const lines = readFileSync(path, "utf8").trimEnd().split("\n").length;
-  const commits = churn.get(file) ?? 0;
-  return `${lines} line${lines === 1 ? "" : "s"}, ${commits} commit${commits === 1 ? "" : "s"}/90d`;
+  const { files, key } = candidate;
+  if (!files || (key !== files[0] && !key.startsWith(`${files[0]}#`))) return "";
+  const present = files.filter((file) => existsSync(join(repo, file)));
+  if (present.length === 0) return "file missing";
+  const lines = present.reduce(
+    (sum, file) => sum + readFileSync(join(repo, file), "utf8").trimEnd().split("\n").length,
+    0,
+  );
+  const commits = files.reduce((sum, file) => sum + (churn.get(file) ?? 0), 0);
+  return [
+    ...(files.length > 1 ? [`${files.length} files`] : []),
+    plural(lines, "line"),
+    `${plural(commits, "commit")}/90d`,
+  ].join(", ");
+}
+
+function plural(n: number, word: string): string {
+  return `${n} ${word}${n === 1 ? "" : "s"}`;
 }
 
 function churnByFile(repo: string): Map<string, number> {

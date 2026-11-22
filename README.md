@@ -25,7 +25,7 @@ Needs node 22+ and git. `gh` (logged in, or `GH_TOKEN` set) is needed for `--all
 
 `--json` (with or without `--all`) prints the candidates the listing would show as an array of `{repo, label, id, play, level, kind, title}`, cheapest attention first, with `repo` as an absolute path. A finder that fails is reported on stderr, never in the array. `plays --json` prints every play, your own included, as `{name, level, description, onRequest}`.
 
-`kind` says what a candidate rests on. `finding`: a tool reported this exact thing (an outdated package, an unused export, a TODO line). `rotation`: one file in turn, with nothing known to be wrong in it. `scan`: the whole repo, for an agent to search. A rotation or a scan says where to look, not that anyone has looked; most of a big repo's candidates are rotations.
+`kind` says what a candidate rests on. `finding`: a tool reported this exact thing (an outdated package, an unused export, a TODO line). `rotation`: a batch of related files in turn, with nothing known to be wrong in them. `scan`: the whole repo, for an agent to search. A rotation or a scan says where to look, not that anyone has looked; most of a big repo's candidates are rotations.
 
 ## Attention levels
 
@@ -58,7 +58,8 @@ Built-in plays are in [plays/](plays/). Your own go in `~/.config/workwork/plays
 Finders:
 
 - `scan` (the default): one candidate per repo; the agent searches with the play's prompt and gives each finding its own id.
-- `rotation`: every tracked code file, largest first (`rotation tests` for test files). Files marked `linguist-vendored` or `linguist-generated` in `.gitattributes` are skipped.
+- `rotation`: every tracked code file, in batches of up to 2000 lines so one agent reads related code together and can change across it (`rotation tests` for test files). Each batch starts with the largest file left, which is also its id, and grows by the files that batch imports or is imported by (relative JS and TS imports, across folders), then by files in its folders. A decision on a batch holds until any of its files changes. Files marked `linguist-vendored` or `linguist-generated` in `.gitattributes` are skipped.
+- `size <lines>`: code files longer than that, to split. A registry or data table that is long by nature gets a `keep`.
 - `outdated <patch|minor|major>`, `knip`, `kit-drift`, `kit-status`, `spec-uncited`, `todo`: mechanical sources.
 
 ## Decisions

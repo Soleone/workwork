@@ -1,9 +1,9 @@
 import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, posix } from "node:path";
 import { git, onPath, run } from "./run.ts";
 
-/** One thing a finder found. `file` is what a decision watches (the whole repo without one): the item comes back once it changes. */
-export type Found = { key: string; title: string; file?: string };
+/** One thing a finder found. `files` are what a decision watches (the whole repo without them): the item comes back once one changes. */
+export type Found = { key: string; title: string; files?: string[] };
 type Finder = (repo: string, arg: string | undefined) => Promise<Found[]>;
 
 export const finders: Record<string, Finder> = {
@@ -16,6 +16,7 @@ export const finders: Record<string, Finder> = {
   todo,
   scan: async () => [{ key: ".", title: "the whole repo" }],
   rotation,
+  size,
 };
 
 // --- outdated
@@ -51,7 +52,7 @@ export function parseOutdated(json: string): (Found & { bump: Bump })[] {
           {
             key: name,
             title: `${current} → ${latest}${dependencyType === "devDependencies" ? ", dev" : ""}`,
-            file: "package.json",
+            files: ["package.json"],
             bump: bumpOf(current, latest),
           },
         ]
@@ -103,11 +104,11 @@ export function parseKnip(stdout: string): Found[] {
   if (!report) throw new Error(`knip printed no JSON report: ${lastLine(stdout)}`);
   const { issues } = JSON.parse(report) as { issues: KnipIssue[] };
   return issues.flatMap(({ file, files, exports, types }) => [
-    ...(files.length ? [{ key: file, title: "unused file", file }] : []),
+    ...(files.length ? [{ key: file, title: "unused file", files: [file] }] : []),
     ...[...exports, ...types].map(({ name, line }) => ({
       key: `${file}#${name}`,
       title: `unused export ${name} (line ${line})`,
-      file,
+      files: [file],
     })),
   ]);
 }
@@ -132,7 +133,7 @@ export function parseKitCheck(output: string): Found[] {
   return [...output.matchAll(/^(DRIFT|missing)\s+(\S+)/gm)].map(([, kind, path]) => ({
     key: path,
     title: kind === "DRIFT" ? "vendored file differs from upstream" : "vendored file missing",
-    file: path,
+    files: [path],
   }));
 }
 
@@ -143,7 +144,7 @@ async function kitStatus(repo: string): Promise<Found[]> {
   return [...stdout.matchAll(/^## (r\d+)[^\n]*\n+([^\n]+)/gm)].map(([, revision, summary]) => ({
     key: revision,
     title: summary.split(/(?<=\.)\s/)[0],
-    file: ".kit.json",
+    files: [".kit.json"],
   }));
 }
 
@@ -171,7 +172,7 @@ async function specUncited(repo: string): Promise<Found[]> {
   return specs.flatMap((file) =>
     specRules(readFileSync(join(repo, file), "utf8"))
       .filter((rule) => !cited.has(rule.slug))
-      .map((rule) => ({ key: rule.slug, title: `${file}: ${rule.text}`, file })),
+      .map((rule) => ({ key: rule.slug, title: `${file}: ${rule.text}`, files: [file] })),
   );
 }
 
@@ -222,24 +223,53 @@ function todoItems(markdown: string): Found[] {
     const taken = items.filter(
       (found) => found.key === base || found.key.startsWith(`${base}~`),
     ).length;
-    items.push({ key: taken ? `${base}~${taken + 1}` : base, title: item, file: "TODO.md" });
+    items.push({
+      key: taken ? `${base}~${taken + 1}` : base,
+      title: item,
+      files: ["TODO.md"],
+    });
   }
   return items;
 }
 
-// --- rotation
+// --- rotation and size
 
 const CODE =
   /\.(c|cc|cjs|clj|cpp|cs|css|cts|ex|exs|go|h|hpp|java|js|jsx|kt|lua|mjs|mts|php|py|rb|rs|scala|scss|sh|svelte|swift|ts|tsx|vue|zig)$/;
 const TEST = /\.(test|spec)\.[^/]+$|(^|\/)(tests?|__tests__)\//;
 
-/** Every tracked code file (or only test files, with `tests`), largest first. Vendored and generated files are skipped. */
+// About what an agent keeps in mind at once; a single bigger file is a batch of its own.
+const BATCH_LINES = 2000;
+
+type Sized = { file: string; lines: number };
+
+/**
+ * Tracked code files in batches of up to BATCH_LINES, largest file first. A batch grows by the files
+ * its own files import or are imported by, wherever they live, then by its folder's files, so
+ * related code is read together even when the folders don't say so. `tests` takes only test files.
+ */
 async function rotation(repo: string, arg: string | undefined): Promise<Found[]> {
+  const files = codeFiles(repo).filter(({ file }) => TEST.test(file) === (arg === "tests"));
+  return batches(files, importGraph(repo, files)).map(([first, ...rest]) => ({
+    key: first.file,
+    title: rest.length ? `with ${rest.map(({ file }) => posix.basename(file)).join(", ")}` : "",
+    files: [first.file, ...rest.map(({ file }) => file)],
+  }));
+}
+
+/** Code files over `limit` lines (500 without one), largest first: too much to read as one piece. */
+async function size(repo: string, limit: string | undefined): Promise<Found[]> {
+  const max = Number(limit ?? 500);
+  return codeFiles(repo)
+    .filter(({ lines }) => lines > max)
+    .map(({ file }) => ({ key: file, title: `over ${max} lines`, files: [file] }));
+}
+
+/** Every tracked code file with its line count, largest first. Vendored and generated files are skipped. */
+function codeFiles(repo: string): Sized[] {
   const files = git(repo, ["ls-files"])
     .split("\n")
-    .filter(
-      (file) => CODE.test(file) && !file.endsWith(".d.ts") && TEST.test(file) === (arg === "tests"),
-    );
+    .filter((file) => CODE.test(file) && !file.endsWith(".d.ts"));
   if (files.length === 0) return [];
   const marked = new Set(
     git(repo, ["check-attr", "--stdin", "linguist-vendored", "linguist-generated"], {
@@ -255,6 +285,63 @@ async function rotation(repo: string, arg: string | undefined): Promise<Found[]>
       file,
       lines: readFileSync(join(repo, file), "utf8").trimEnd().split("\n").length,
     }))
-    .sort((a, b) => b.lines - a.lines)
-    .map(({ file }) => ({ key: file, title: "", file }));
+    .sort((a, b) => b.lines - a.lines);
+}
+
+const IMPORT = /\b(?:from|import|require)\s*\(?\s*["'](\.\.?\/[^"'\n]+)["']/g;
+const RESOLVE = ["", ".ts", ".tsx", ".js", ".jsx", ".mjs", "/index.ts", "/index.tsx", "/index.js"];
+
+/** Relative imports between the given files, both ways, so a file's neighbors are what it imports and what imports it. */
+function importGraph(repo: string, files: Sized[]): Map<string, Set<string>> {
+  const known = new Set(files.map(({ file }) => file));
+  const graph = new Map(files.map(({ file }) => [file, new Set<string>()]));
+  for (const { file } of files) {
+    for (const [, spec] of readFileSync(join(repo, file), "utf8").matchAll(IMPORT)) {
+      // TypeScript's ESM imports name the .js a .ts file compiles to.
+      const base = posix.join(posix.dirname(file), spec);
+      const target = [base, base.replace(/\.js$/, ".ts"), base.replace(/\.js$/, ".tsx")]
+        .flatMap((path) => RESOLVE.map((ending) => path + ending))
+        .find((path) => known.has(path) && path !== file);
+      if (!target) continue;
+      graph.get(file)!.add(target);
+      graph.get(target)!.add(file);
+    }
+  }
+  return graph;
+}
+
+/** Seeds each batch with the largest file left, then adds the closest file that still fits until none does. */
+function batches(files: Sized[], graph: Map<string, Set<string>>): Sized[][] {
+  const left = new Map(files.map((each) => [each.file, each]));
+  const result: Sized[][] = [];
+  for (const seed of files) {
+    if (!left.delete(seed.file)) continue;
+    const batch = [seed];
+    const folders = new Set([posix.dirname(seed.file)]);
+    let lines = seed.lines;
+    for (;;) {
+      const fits = (each: Sized | undefined): each is Sized =>
+        each !== undefined && left.has(each.file) && lines + each.lines <= BATCH_LINES;
+      const linked = batch.flatMap(({ file }) =>
+        [...graph.get(file)!].map((near) => left.get(near)),
+      );
+      const next =
+        mostLinked(linked.filter(fits)) ??
+        files.find((each) => fits(each) && folders.has(posix.dirname(each.file)));
+      if (!next) break;
+      left.delete(next.file);
+      batch.push(next);
+      folders.add(posix.dirname(next.file));
+      lines += next.lines;
+    }
+    result.push(batch);
+  }
+  return result;
+}
+
+/** The file that appears most often, that is, with the most imports to and from the batch. */
+function mostLinked(linked: Sized[]): Sized | undefined {
+  const counts = new Map<Sized, number>();
+  for (const each of linked) counts.set(each, (counts.get(each) ?? 0) + 1);
+  return [...counts].sort((a, b) => b[1] - a[1])[0]?.[0];
 }
