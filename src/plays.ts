@@ -55,14 +55,12 @@ function parsePlay(file: string): Play {
   if (!LEVELS.includes(level))
     throw new Error(`${file}: level must be one of ${LEVELS.join(", ")}`);
   const name = fields.get("name");
-  const description = fields.get("description");
   const done = fields.get("done");
-  if (!name || !description || !done)
-    throw new Error(`${file}: name, description and done are required`);
+  if (!name || !done) throw new Error(`${file}: name and done are required`);
   return {
     name,
     level,
-    description,
+    description: fields.get("description") ?? "",
     finder: fields.get("finder") || "scan",
     done,
     onRequest: fields.get("on-request") === "true",

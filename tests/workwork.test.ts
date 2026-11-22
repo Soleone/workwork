@@ -5,7 +5,7 @@ import { delimiter, join } from "node:path";
 import { beforeAll, describe, expect, test } from "vite-plus/test";
 import { finders, parseKitCheck, parseKnip, parseOutdated } from "../src/finders.ts";
 import { listed, listing } from "../src/list.ts";
-import { loadPlays } from "../src/plays.ts";
+import { prompt } from "../src/prompt.ts";
 import { readDecisions, recordDecisions, type Decision } from "../src/store.ts";
 
 const scratch = mkdtempSync(join(tmpdir(), "workwork-test-"));
@@ -151,13 +151,18 @@ describe("decisions", () => {
 });
 
 describe("plays", () => {
-  test("a play without a description is an error naming its file", () => {
+  test("a legacy custom play without a description does not block candidate prompts", async () => {
+    const repo = repoWith({ "src/a.ts": "export const a = 1;\n" });
     const dir = join(scratch, "data", "apps", "workwork", "plays");
     mkdirSync(dir, { recursive: true });
-    const file = join(dir, "vague.md");
-    writeFileSync(file, "---\nname: vague\nlevel: skim\ndone: done\n---\n\nDo things.\n");
+    const file = join(dir, "clarify.md");
+    writeFileSync(
+      file,
+      "---\nname: clarify\nlevel: skim\nfinder: rotation\ndone: easier to follow\n---\n\nClarify the code.\n",
+    );
     try {
-      expect(() => loadPlays()).toThrow(`${file}: name, description and done are required`);
+      await expect(prompt(repo, "bug-sweep/.")).resolves.toContain("# workwork: bug-sweep/.");
+      await expect(prompt(repo, "clarify/src/a.ts")).resolves.toContain("Clarify the code.");
     } finally {
       rmSync(file);
     }

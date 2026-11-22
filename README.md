@@ -39,7 +39,7 @@ A play's level can be raised, never lowered. auto needs a mechanical check that 
 
 ## Plays
 
-A play is one markdown file: frontmatter plus the prompt. `description` is one sentence on what the play does, for whoever picks what to run.
+A play is one markdown file: frontmatter plus the prompt. `description` is optional and tells whoever picks what to run what the play does in one sentence.
 
 ```markdown
 ---
