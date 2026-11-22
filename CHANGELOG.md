@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.3.0](https://github.com/Soleone/workwork/compare/v0.2.0...v0.3.0) (2026-11-22)
+
+### ⚠ BREAKING CHANGES
+
+* --play is --blueprint, `workwork plays` is `workwork
+  blueprints`, and the JSON fields play and level are blueprint and attention,
+  with auto now none. Old play files, the plays folder, level, auto and the
+  rotation finder are still read.
+
+### Features
+
+* plays are blueprints, level is attention (none, skim, decide), rotation is batch ([0ac4505](https://github.com/Soleone/workwork/commit/0ac450545ebe2ea35fec4271a5432ed1d4edf83e))
+
 ## [0.2.0](https://github.com/Soleone/workwork/compare/v0.1.2...v0.2.0) (2026-11-22)
 
 ### Features

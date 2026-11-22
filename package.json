@@ -1,6 +1,6 @@
 {
   "name": "@soleone/workwork",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Find agent work across your repos, sorted by how much human attention it needs.",
   "keywords": [
     "agents",
